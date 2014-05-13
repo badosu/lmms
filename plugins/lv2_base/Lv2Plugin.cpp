@@ -27,6 +27,13 @@
 #include "Lv2Plugin.h"
 
 
+long Lv2Plugin::s_refcount = 0;
+std::vector<const char *> Lv2Plugin::s_uriMap;
+std::vector<LilvNode *> Lv2Plugin::s_nodeMap;
+LilvWorld * Lv2Plugin::s_world;
+LilvPlugins * Lv2Plugin::s_plugins;
+
+
 #define NODE(X) s_nodeMap[X-1]
 
 
@@ -63,6 +70,8 @@ void * Lv2Port::buffer()
 	{
 		case TypeControl:
 			return static_cast<void *>( &m_value );
+		case TypeAudio:
+			return static_cast<void *>( m_buffer );
 		case TypeEvent:
 			return lv2_evbuf_get_buffer( m_evbuf );
 		default:
@@ -85,7 +94,7 @@ void Lv2Port::reset()
 
 
 
-void Lv2Port::writeEvent( const MidiEvent& event, const MidiTime& time )
+bool Lv2Port::writeEvent( const MidiEvent& event, const MidiTime& time )
 {
 	uint8_t msg[3];
 
@@ -93,16 +102,19 @@ void Lv2Port::writeEvent( const MidiEvent& event, const MidiTime& time )
 	msg[1] = event.key() & 0x7f;
 	msg[2] = event.velocity();
 
+	printf( "%x, %x, %x\n", msg[0], msg[1], msg[2] );
+
 	LV2_Evbuf_Iterator iter = lv2_evbuf_end( m_evbuf );
-	lv2_evbuf_write( &iter, time, 0, Lv2Plugin::midi_MidiEvent, 3, msg );
+	return lv2_evbuf_write( &iter, time, 0, Lv2Plugin::midi_MidiEvent, 3, msg );
 }
 
 
 
 
-Lv2Plugin::Lv2Plugin( const char * uri, double rate ) :
+Lv2Plugin::Lv2Plugin( const char * uri, double rate, fpp_t bufferSize ) :
 	m_midiIn( -1 )
 {
+	printf( "%d\n", (int)s_refcount );
 	if( s_refcount++ == 0 )
 	{
 		s_world = lilv_world_new();
@@ -132,6 +144,9 @@ Lv2Plugin::Lv2Plugin( const char * uri, double rate ) :
 		s_uriMap.push_back( LV2_URID__map );
 		s_uriMap.push_back( LV2_URID__unmap );
 
+		urid__map.map = mapUri;
+		urid__unmap.unmap = unmapUri;
+
 		for( int i = 0; i < s_uriMap.size(); ++i )
 		{
 			LilvNode * node = lilv_new_uri( s_world, s_uriMap[i] );
@@ -150,6 +165,8 @@ Lv2Plugin::Lv2Plugin( const char * uri, double rate ) :
 		return;
 	}
 
+	m_bufferSize = bufferSize;
+
 	createPorts();
 	activate();
 }
@@ -161,6 +178,14 @@ Lv2Plugin::~Lv2Plugin()
 {
 	deactivate();
 	cleanup();
+
+	for( uint32_t p = 0; p < m_ports.size(); ++p )
+	{
+		if( m_ports[p].type() == Lv2Port::TypeAudio && m_ports[p].m_buffer )
+		{
+			free( m_ports[p].m_buffer );
+		}
+	}
 
 	if( --s_refcount == 0 )
 	{
@@ -219,6 +244,22 @@ void Lv2Plugin::createPorts()
 		else if( lilv_port_is_a( m_plugin, portdesc, NODE( lv2_AudioPort ) ) )
 		{
 			port.m_type = Lv2Port::TypeAudio;
+			port.m_buffer = static_cast<float *>( malloc( sizeof( float ) * m_bufferSize ) );
+			for( uint32_t i = 0; i < m_bufferSize; ++i )
+			{
+				port.m_buffer[i] = 0;
+			}
+			switch( port.flow() )
+			{
+				case Lv2Port::FlowInput:
+					m_inputs.push_back( p );
+					break;
+				case Lv2Port::FlowOutput:
+					m_outputs.push_back( p );
+					break;
+				default:
+					break;
+			}
 		}
 		if( lilv_port_is_a( m_plugin, portdesc, NODE( atom_AtomPort ) ) || lilv_port_is_a( m_plugin, portdesc, NODE( ev_EventPort ) ) )
 		{
@@ -251,36 +292,35 @@ bool Lv2Plugin::instantiate( double rate )
 
 
 
-void Lv2Plugin::process( const fpp_t nframes, float** inputs, float** outputs )
+void Lv2Plugin::resizeBuffers( fpp_t newSize )
 {
-	int input = 0;
-	int output = 0;
+	if( m_bufferSize >= newSize )
+	{
+		return;
+	}
 
+	m_bufferSize = newSize;
+	for( uint32_t p = 0; p < m_ports.size(); ++p )
+	{
+		if( m_ports[p].type() == Lv2Port::TypeAudio )
+		{
+			m_ports[p].m_buffer = static_cast<float *>( realloc( m_ports[p].m_buffer, sizeof( float ) * newSize ) );
+			for( uint32_t i = 0; i < newSize; ++i )
+			{
+				m_ports[p].m_buffer[i] = 0;
+			}
+		}
+	}
+}
+
+
+
+
+void Lv2Plugin::run( const fpp_t nframes )
+{
 	for( int i = 0; i < m_ports.size(); ++i )
 	{
-		switch( m_ports[i].type() )
-		{
-			case Lv2Port::TypeControl:
-			case Lv2Port::TypeEvent:
-				lilv_instance_connect_port( m_instance, i, m_ports[i].buffer() );
-				break;
-			case Lv2Port::TypeAudio:
-				switch( m_ports[i].flow() )
-				{
-					// TODO: use lv2:designation
-					case Lv2Port::FlowInput:
-						lilv_instance_connect_port( m_instance, i, static_cast<void *>( inputs[input++] ) );
-						break;
-					case Lv2Port::FlowOutput:
-						lilv_instance_connect_port( m_instance, i, static_cast<void *>( outputs[output++] ) );
-						break;
-					default:
-						break;
-				}
-				break;
-			default:
-				break;
-		}
+		lilv_instance_connect_port( m_instance, i, m_ports[i].buffer() );
 	}
 
 	lilv_instance_run( m_instance, static_cast<uint32_t>( nframes ) );

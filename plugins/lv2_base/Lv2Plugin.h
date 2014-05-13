@@ -95,7 +95,7 @@ public:
 	void * buffer();
 	void reset();
 
-	void writeEvent( const MidiEvent& event, const MidiTime& time );
+	bool writeEvent( const MidiEvent& event, const MidiTime& time );
 
 private:
 	Flow m_flow;
@@ -109,6 +109,7 @@ private:
 	float m_value;
 
 	LV2_Evbuf * m_evbuf;
+	float * m_buffer;
 
 	friend class Lv2Plugin;
 };
@@ -119,7 +120,7 @@ private:
 class Lv2Plugin
 {
 public:
-	Lv2Plugin( const char * uri, double rate );
+	Lv2Plugin( const char * uri, double rate, fpp_t bufferSize );
 	~Lv2Plugin();
 
 	bool instantiate( double rate );
@@ -140,12 +141,13 @@ public:
 		lilv_instance_free( m_instance );
 	}
 
-	inline void writeEvent( const MidiEvent& event, const MidiTime& time )
+	inline bool writeEvent( const MidiEvent& event, const MidiTime& time )
 	{
 		if( m_midiIn != -1 )
 		{
-			m_ports[m_midiIn].writeEvent( event, time );
+			return m_ports[m_midiIn].writeEvent( event, time );
 		}
+		return false;
 	}
 
 	inline uint32_t numPorts()
@@ -157,7 +159,29 @@ public:
 		return 0;
 	}
 
-	void process( const fpp_t nframes, float** inputs, float** outputs );
+	inline float * inputBuffer( int index, bool wrap )
+	{
+		int i = wrap ? index % qMax( m_inputs.size(), 1ul ) : index;
+		if( m_inputs[i] )
+		{
+			return static_cast<float *>( m_ports[m_inputs[i]].buffer() );
+		}
+		return NULL;
+	}
+
+	inline float * outputBuffer( int index, bool wrap )
+	{
+		int i = wrap ? index % qMax( m_outputs.size(), 1ul ) : index;
+		if( m_outputs[i] )
+		{
+			return static_cast<float *>( m_ports[m_outputs[i]].buffer() );
+		}
+		return NULL;
+	}
+
+	void resizeBuffers( fpp_t newSize );
+
+	void run( const fpp_t nframes );
 
 	enum URIs
 	{
@@ -189,8 +213,8 @@ private:
 	static std::vector<const char *> s_uriMap;
 	static std::vector<LilvNode *> s_nodeMap;
 
-	LV2_URID mapUri( LV2_URID_Map_Handle handle, const char * uri );
-	const char* unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid );
+	static LV2_URID mapUri( LV2_URID_Map_Handle handle, const char * uri );
+	static const char* unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid );
 
 	bool featureIsSupported( const char * uri );
 
@@ -202,5 +226,10 @@ private:
 	LilvInstance * m_instance;
 	std::vector<Lv2Port> m_ports;
 
+	fpp_t m_bufferSize;
+
 	uint32_t m_midiIn;
+	std::vector<uint32_t> m_inputs;
+	std::vector<uint32_t> m_outputs;
+
 };
