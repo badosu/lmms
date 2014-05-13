@@ -38,6 +38,7 @@ OPTION(WANT_SDL		"Include SDL (Simple DirectMedia Layer) support" ON)
 OPTION(WANT_SF2		"Include SoundFont2 player plugin" ON)
 OPTION(WANT_GIG		"Include GIG player plugin" ON)
 OPTION(WANT_STK		"Include Stk (Synthesis Toolkit) support" ON)
+OPTION(WANT_LILV	"Include LV2 support" ON)
 OPTION(WANT_SWH		"Include Steve Harris's LADSPA plugins" ON)
 OPTION(WANT_TAP		"Include Tom's Audio Processing LADSPA plugins" ON)
 OPTION(WANT_VST		"Include VST support" ON)
@@ -216,6 +217,20 @@ IF(WANT_STK)
 			"if you require the Mallets instrument")
 	ENDIF(STK_FOUND)
 ENDIF(WANT_STK)
+
+
+# check for Lilv
+IF(WANT_LILV)
+	FIND_PACKAGE(Lilv)
+	IF(LILV_FOUND)
+		SET(LMMS_HAVE_LILV TRUE)
+		SET(STATUS_LILV "OK")
+	ELSE(LILV_FOUND)
+		SET(LILV_INCLUDE_DIR "")
+		SET(STATUS_LILV "not found, please install liblilv-dev (or similar) "
+			"if you require LV2 support")
+	ENDIF(LILV_FOUND)
+ENDIF(WANT_LILV)
 
 
 # check for PortAudio
@@ -531,6 +546,7 @@ MESSAGE(
 "* Carla Patchbay & Rack       : ${STATUS_CARLA}\n"
 "* SoundFont2 player           : ${STATUS_FLUIDSYNTH}\n"
 "* Stk Mallets                 : ${STATUS_STK}\n"
+"* LV2 host                    : ${STATUS_LILV}\n"
 "* VST-instrument hoster       : ${STATUS_VST}\n"
 "* VST-effect hoster           : ${STATUS_VST}\n"
 "* CALF LADSPA plugins         : ${STATUS_CALF}\n"
