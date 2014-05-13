@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
- * This file is part of LMMS - http://lmms.sourceforge.net
+ * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -23,62 +23,92 @@
  */
 
 
-#ifndef LV2PLUGIN_H
-#define LV2PLUGIN_H
+#include <lilv/lilv.h>
 
-#include <QVector>
+#include <lv2/lv2plug.in/ns/ext/atom/atom.h>
+#include <lv2/lv2plug.in/ns/ext/buf-size/buf-size.h>
+#include <lv2/lv2plug.in/ns/ext/atom/util.h>
+#include <lv2/lv2plug.in/ns/ext/event/event.h>
+#include <lv2/lv2plug.in/ns/ext/midi/midi.h>
+#include <lv2/lv2plug.in/ns/ext/options/options.h>
+#include <lv2/lv2plug.in/ns/ext/parameters/parameters.h>
+#include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
+#include <lv2/lv2plug.in/ns/ext/urid/urid.h>
+#include <lv2/lv2plug.in/ns/lv2core/lv2.h>
+
+#include <vector>
 #include <QtGlobal>
 
 #include "MidiEvent.h"
 #include "MidiTime.h"
-#include "Lv2Base.h"
-#include "Lv2NoteConverter.h"
+
+#include "lv2_evbuf.h"
 
 
 
-
-class Lv2Plugin;
-
-
-
-
-class PLUGIN_EXPORT Lv2Port
+class Lv2Port
 {
 public:
-	Lv2Port();
-	~Lv2Port();
+	enum Flow {
+		FlowUnknown,
+		FlowInput,
+		FlowOutput,
+	};
 
-	void cleanup();
+	enum Type {
+		TypeUnknown,
+		TypeControl,
+		TypeAudio,
+		TypeEvent
+	};
 
-	Lv2PortFlow flow() const { return m_descriptor->flow(); }
-	Lv2PortType type() const { return m_descriptor->type(); }
-	Lv2EventType eventType() const { return m_descriptor->eventType(); }
+	Flow flow() const
+	{
+		return m_flow;
+	}
 
-	const char * symbol() const { return m_descriptor->symbol(); }
-	const char * name() const { return m_descriptor->name(); }
+	Type type() const
+	{
+		return m_type;
+	}
 
-	void setValue( float value ) { m_value = value; }
-	float value() const { return m_value; }
+	const char * symbol() const
+	{
+		return m_symbol;
+	}
+
+	const char * name() const
+	{
+		return m_name;
+	}
+
+	void setValue( float value )
+	{
+		m_value = value;
+	}
+
+	float value() const
+	{
+		return m_value;
+	}
 
 	void * buffer();
 	void reset();
 
-	void writeEvent( const f_cnt_t time, const MidiEvent& event );
-	void convertEvents();
+	void writeEvent( const MidiEvent& event, const MidiTime& time );
 
 private:
-	Lv2PortDescriptor * m_descriptor;
-	Lv2Plugin * m_plugin;
+	Flow m_flow;
+	Type m_type;
+	const char * m_symbol;
+	const char * m_name;
 
+	float m_minimum;
+	float m_maximum;
+	float m_default;
 	float m_value;
-	float * m_buffer;
-	LV2_Atom_Sequence * m_atomSequence;
 
-	Lv2NoteConverter m_noteConverter;
-
-	f_cnt_t m_frame;
-
-	LilvState * m_state;
+	LV2_Evbuf * m_evbuf;
 
 	friend class Lv2Plugin;
 };
@@ -86,58 +116,91 @@ private:
 
 
 
-class PLUGIN_EXPORT Lv2Plugin
+class Lv2Plugin
 {
 public:
-	Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t bufferSize );
+	Lv2Plugin( const char * uri, double rate );
 	~Lv2Plugin();
 
 	bool instantiate( double rate );
 	void createPorts();
 
-	const LilvPlugin * plugin() const { return m_descriptor->plugin(); }
-	LilvInstance * instance() const { return m_instance; }
-	Lv2PluginDescriptor * descriptor() const { return m_descriptor; }
-
-	inline void activate() { lilv_instance_activate( m_instance ); }
-	inline void deactivate() { lilv_instance_deactivate( m_instance ); }
-	inline void cleanup() { lilv_instance_free( m_instance ); }
-
-	inline void writeEvent( const f_cnt_t time, const MidiEvent& event )
+	inline void activate()
 	{
-		if( m_descriptor->portIndex( AtomIn ) != -1 )
+		lilv_instance_activate( m_instance );
+	}
+
+	inline void deactivate()
+	{
+		lilv_instance_deactivate( m_instance );
+	}
+
+	inline void cleanup()
+	{
+		lilv_instance_free( m_instance );
+	}
+
+	inline void writeEvent( const MidiEvent& event, const MidiTime& time )
+	{
+		if( m_midiIn != -1 )
 		{
-			m_ports[m_descriptor->portIndex( AtomIn )].writeEvent( time, event );
+			m_ports[m_midiIn].writeEvent( event, time );
 		}
 	}
 
-	uint32_t numPorts() { return m_descriptor->numPorts(); }
-	Lv2Port * port( const char * symbol );
+	inline uint32_t numPorts()
+	{
+		if( m_plugin )
+		{
+			return lilv_plugin_get_num_ports( m_plugin );
+		}
+		return 0;
+	}
 
-	void resizeBuffers( fpp_t newSize );
-	void run( const fpp_t nframes );
+	void process( const fpp_t nframes, float** inputs, float** outputs );
 
-	void * buffer( PortDesignation designation ) { return m_ports[m_descriptor->portIndex( designation )].buffer(); }
-
-	void loadState( const char * stateString );
-	void saveState();
-	const char * stateString() { return m_stateString; }
-
-	void loadPreset( int index );
-
-	void setBaseVelocity( uint8_t value ) { m_baseVelocity = value; }
-	const uint8_t baseVelocity() const { return m_baseVelocity; }
+	enum URIs
+	{
+		atom_AtomPort = 1,
+		atom_Chunk,
+		atom_Float,
+		atom_Int,
+		atom_Sequence,
+		bufsz_maxBlockLength,
+		bufsz_minBlockLength,
+		bufsz_sequenceSize,
+		ev_EventPort,
+		lv2_AudioPort,
+		lv2_ControlPort,
+		lv2_InputPort,
+		lv2_OutputPort,
+		lv2_control,
+		lv2_name,
+		midi_MidiEvent,
+		param_sampleRate,
+		pg_left,
+		pg_right,
+		rdfs_label,
+		urid_map,
+		urid_unmap
+	};
 
 private:
-	Lv2PluginDescriptor * m_descriptor;
+	static std::vector<const char *> s_uriMap;
+	static std::vector<LilvNode *> s_nodeMap;
+
+	LV2_URID mapUri( LV2_URID_Map_Handle handle, const char * uri );
+	const char* unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid );
+
+	bool featureIsSupported( const char * uri );
+
+	static LilvWorld * s_world;
+	static LilvPlugins * s_plugins;
+	static long s_refcount;
+
+	LilvPlugin * m_plugin;
 	LilvInstance * m_instance;
-	QVector<Lv2Port> m_ports;
+	std::vector<Lv2Port> m_ports;
 
-	uint8_t m_baseVelocity;
-
-	fpp_t m_bufferSize;
-
-	const char * m_stateString;
+	uint32_t m_midiIn;
 };
-
-#endif

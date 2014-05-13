@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
- * This file is part of LMMS - http://lmms.sourceforge.net
+ * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -24,47 +24,35 @@
 
 
 #include "lmmsconfig.h"
-
-#include "engine.h"
-#include "Mixer.h"
-
 #include "Lv2Plugin.h"
 
 
+#define NODE(X) s_nodeMap[X-1]
 
 
-Lv2Port::Lv2Port() :
-	m_descriptor( NULL ),
-	m_plugin( NULL ),
-	m_buffer( NULL ),
-	m_atomSequence( NULL ),
-	m_state( NULL )
-{
-}
+static LV2_URID_Map urid__map = { NULL, NULL };
+static LV2_URID_Unmap urid__unmap = { NULL, NULL };
 
+static LV2_Feature mapFeature = { LV2_URID__map, &urid__map };
+static LV2_Feature unmapFeature = { LV2_URID__unmap, &urid__unmap };
 
+//~ static LV2_Options_Option options[5];
+static LV2_Feature optionsFeature = { LV2_OPTIONS__options, NULL };
 
+static LV2_Feature bufSizeFeatures[3] = {
+	{ LV2_BUF_SIZE__powerOf2BlockLength, NULL },
+	{ LV2_BUF_SIZE__fixedBlockLength, NULL },
+	{ LV2_BUF_SIZE__boundedBlockLength, NULL }
+};
 
-Lv2Port::~Lv2Port()
-{
-}
-
-
-
-
-void Lv2Port::cleanup()
-{
-	if( m_buffer )
-	{
-		free( static_cast<void *>( m_buffer ) );
-		m_buffer = NULL;
-	}
-	if( m_atomSequence )
-	{
-		free( static_cast<void *>( m_atomSequence ) );
-		m_buffer = NULL;
-	}
-}
+static const LV2_Feature* features[7] = {
+	&mapFeature, &unmapFeature,
+	&optionsFeature,
+	&bufSizeFeatures[0],
+	&bufSizeFeatures[1],
+	&bufSizeFeatures[2],
+	NULL
+};
 
 
 
@@ -75,13 +63,10 @@ void * Lv2Port::buffer()
 	{
 		case TypeControl:
 			return static_cast<void *>( &m_value );
-		case TypeAudio:
-			return static_cast<void *>( m_buffer );
 		case TypeEvent:
-			return static_cast<void *>( m_atomSequence );
+			return lv2_evbuf_get_buffer( m_evbuf );
 		default:
-			fprintf( stderr, "type for port `%s' unknown, returning NULL\n", symbol() );
-			return NULL;
+			return 0;
 	}
 }
 
@@ -90,50 +75,82 @@ void Lv2Port::reset()
 	switch( type() )
 	{
 		case TypeEvent:
+			lv2_evbuf_reset( m_evbuf, flow() == FlowInput );
 			break;
 		default:
 			break;
 	}
-	m_frame = 0;
 }
 
 
 
 
-void Lv2Port::convertEvents()
+void Lv2Port::writeEvent( const MidiEvent& event, const MidiTime& time )
 {
-	if( type() != TypeEvent )
-	{
-		return;
-	}
+	uint8_t msg[3];
 
-	if( eventType() != EventTypeMidi )
-	{
-		return;
-	}
+	msg[0] = event.type();
+	msg[1] = event.key() & 0x7f;
+	msg[2] = event.velocity();
 
-	LV2_Atom_Sequence * processed = m_noteConverter.process( m_atomSequence, m_plugin->baseVelocity() );
-	memcpy( m_atomSequence, processed, sizeof( LV2_Atom_Sequence ) + lv2()->s_sequenceSize );
+	LV2_Evbuf_Iterator iter = lv2_evbuf_end( m_evbuf );
+	lv2_evbuf_write( &iter, time, 0, Lv2Plugin::midi_MidiEvent, 3, msg );
 }
 
 
 
 
-Lv2Plugin::Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t bufferSize ) :
-	m_descriptor( descriptor ),
-	m_instance( NULL ),
-	m_bufferSize( bufferSize ),
-	m_stateString( NULL )
+Lv2Plugin::Lv2Plugin( const char * uri, double rate ) :
+	m_midiIn( -1 )
 {
-	lv2()->setRate( rate );
-	lv2()->setBufferSize( engine::mixer()->framesPerPeriod() );
+	if( s_refcount++ == 0 )
+	{
+		s_world = lilv_world_new();
+		lilv_world_load_all( s_world );
+		s_plugins = const_cast<LilvPlugins *>( lilv_world_get_all_plugins( s_world ) );
+
+		s_uriMap.push_back( LV2_ATOM__AtomPort );
+		s_uriMap.push_back( LV2_ATOM__Chunk );
+		s_uriMap.push_back( LV2_ATOM__Float );
+		s_uriMap.push_back( LV2_ATOM__Int );
+		s_uriMap.push_back( LV2_ATOM__Sequence );
+		s_uriMap.push_back( LV2_BUF_SIZE__maxBlockLength );
+		s_uriMap.push_back( LV2_BUF_SIZE__minBlockLength );
+		s_uriMap.push_back( LV2_BUF_SIZE__sequenceSize );
+		s_uriMap.push_back( LV2_EVENT__EventPort );
+		s_uriMap.push_back( LV2_CORE__AudioPort );
+		s_uriMap.push_back( LV2_CORE__ControlPort );
+		s_uriMap.push_back( LV2_CORE__InputPort );
+		s_uriMap.push_back( LV2_CORE__OutputPort );
+		s_uriMap.push_back( LV2_CORE__control );
+		s_uriMap.push_back( LV2_CORE__name );
+		s_uriMap.push_back( LV2_MIDI__MidiEvent );
+		s_uriMap.push_back( LV2_PARAMETERS__sampleRate );
+		s_uriMap.push_back( LV2_PORT_GROUPS__left );
+		s_uriMap.push_back( LV2_PORT_GROUPS__right );
+		s_uriMap.push_back( LILV_NS_RDFS "label" );
+		s_uriMap.push_back( LV2_URID__map );
+		s_uriMap.push_back( LV2_URID__unmap );
+
+		for( int i = 0; i < s_uriMap.size(); ++i )
+		{
+			LilvNode * node = lilv_new_uri( s_world, s_uriMap[i] );
+			s_nodeMap.push_back( node );
+		}
+
+	}
+
+	LilvNode * node = lilv_new_uri( s_world, uri );
+	m_plugin = const_cast<LilvPlugin *>( lilv_plugins_get_by_uri( s_plugins, node ) );
+	free( node );
 
 	if( !instantiate( rate ) )
 	{
-		fprintf( stderr, "Could not instantiate <%s>\n", m_descriptor->uri() );
+		fprintf( stderr, "Could not instantiate <%s>\n", uri );
 		return;
 	}
 
+	createPorts();
 	activate();
 }
 
@@ -142,16 +159,84 @@ Lv2Plugin::Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t buffe
 
 Lv2Plugin::~Lv2Plugin()
 {
-	if( m_instance )
-	{
-		deactivate();
-		cleanup();
+	deactivate();
+	cleanup();
 
-		for( uint32_t p = 0; p < m_ports.size(); ++p )
+	if( --s_refcount == 0 )
+	{
+		for( int i = 0; i < s_nodeMap.size(); ++i )
 		{
-			m_ports[p].cleanup();
+			lilv_node_free( s_nodeMap[i] );
 		}
+		s_nodeMap.clear();
+		s_uriMap.clear();
+		lilv_world_free( s_world );
 	}
+}
+
+
+
+
+void Lv2Plugin::createPorts()
+{
+	LilvNode * node;
+	LilvPort * portdesc;
+
+	float* mins = new float[numPorts()];
+	float* maxs = new float[numPorts()];
+	float* defs = new float[numPorts()];
+	lilv_plugin_get_port_ranges_float( m_plugin, mins, maxs, defs );
+
+	for( uint32_t p = 0; p < numPorts(); ++p )
+	{
+		Lv2Port port;
+
+		portdesc = const_cast<LilvPort *>( lilv_plugin_get_port_by_index( m_plugin, p ) );
+
+		port.m_symbol = lilv_node_as_string( lilv_port_get_symbol( m_plugin, portdesc ) );
+		node = const_cast<LilvNode *>( lilv_port_get_name( m_plugin, portdesc ) );
+		port.m_name = lilv_node_as_string( node );
+		free( node );
+
+		// Flow
+		if( lilv_port_is_a( m_plugin, portdesc, NODE( lv2_InputPort ) ) )
+		{
+			port.m_flow = Lv2Port::FlowInput;
+		}
+		else if( lilv_port_is_a( m_plugin, portdesc, NODE( lv2_OutputPort ) ) )
+		{
+			port.m_flow = Lv2Port::FlowOutput;
+		}
+
+		// Type
+		if( lilv_port_is_a( m_plugin, portdesc, NODE( lv2_ControlPort ) ) )
+		{
+			port.m_type = Lv2Port::TypeControl;
+			port.m_minimum = mins[p];
+			port.m_maximum = maxs[p];
+			port.setValue( defs[p] );
+		}
+		else if( lilv_port_is_a( m_plugin, portdesc, NODE( lv2_AudioPort ) ) )
+		{
+			port.m_type = Lv2Port::TypeAudio;
+		}
+		if( lilv_port_is_a( m_plugin, portdesc, NODE( atom_AtomPort ) ) || lilv_port_is_a( m_plugin, portdesc, NODE( ev_EventPort ) ) )
+		{
+			port.m_type = Lv2Port::TypeEvent;
+			if( m_midiIn == -1 && port.flow() == Lv2Port::FlowInput )
+			{
+				m_midiIn = p;
+			}
+			LV2_Evbuf_Type type = lilv_port_is_a( m_plugin, portdesc, NODE( atom_AtomPort ) ) ? LV2_EVBUF_ATOM : LV2_EVBUF_EVENT;
+			port.m_evbuf = lv2_evbuf_new( 1024, type, atom_Chunk, atom_Sequence );
+		}
+
+		m_ports.push_back( port );
+	}
+
+	delete[] mins;
+	delete[] maxs;
+	delete[] defs;
 }
 
 
@@ -159,87 +244,43 @@ Lv2Plugin::~Lv2Plugin()
 
 bool Lv2Plugin::instantiate( double rate )
 {
-	for( uint32_t p = 0; p < numPorts(); ++p )
-	{
-		Lv2Port port;
-		Lv2PortDescriptor * portdesc = m_descriptor->portDescriptor( p );
-		port.m_descriptor = portdesc;
-		port.m_plugin = this;
-
-		switch( portdesc->type() )
-		{
-			case TypeControl:
-				port.m_value = portdesc->defaultValue();
-				break;
-			case TypeAudio:
-				port.m_buffer = static_cast<float *>( calloc( m_bufferSize, sizeof( float ) ) );
-				break;
-			case TypeEvent:
-				port.m_atomSequence = static_cast<LV2_Atom_Sequence *>( calloc( 1, sizeof( LV2_Atom_Sequence ) + lv2()->s_sequenceSize ) );
-				port.reset();
-				break;
-			default:
-				break;
-		}
-		m_ports.push_back( port );
-	}
-	m_instance = lilv_plugin_instantiate( m_descriptor->m_plugin, rate, lv2()->s_features );
+	m_instance = lilv_plugin_instantiate( m_plugin, rate, features );
 	return !!m_instance;
 }
 
 
 
 
-Lv2Port * Lv2Plugin::port( const char * symbol )
+void Lv2Plugin::process( const fpp_t nframes, float** inputs, float** outputs )
 {
+	int input = 0;
+	int output = 0;
+
 	for( int i = 0; i < m_ports.size(); ++i )
 	{
-		if( !strcmp( symbol, m_ports[i].symbol() ) )
+		switch( m_ports[i].type() )
 		{
-			return &m_ports[i];
+			case Lv2Port::TypeControl:
+			case Lv2Port::TypeEvent:
+				lilv_instance_connect_port( m_instance, i, m_ports[i].buffer() );
+				break;
+			case Lv2Port::TypeAudio:
+				switch( m_ports[i].flow() )
+				{
+					// TODO: use lv2:designation
+					case Lv2Port::FlowInput:
+						lilv_instance_connect_port( m_instance, i, static_cast<void *>( inputs[input++] ) );
+						break;
+					case Lv2Port::FlowOutput:
+						lilv_instance_connect_port( m_instance, i, static_cast<void *>( outputs[output++] ) );
+						break;
+					default:
+						break;
+				}
+				break;
+			default:
+				break;
 		}
-	}
-	return NULL;
-}
-
-
-
-
-void Lv2Plugin::resizeBuffers( fpp_t newSize )
-{
-	if( m_bufferSize >= newSize )
-	{
-		return;
-	}
-
-	m_bufferSize = newSize;
-	for( uint32_t p = 0; p < m_ports.size(); ++p )
-	{
-		if( m_ports[p].type() == TypeAudio )
-		{
-			m_ports[p].m_buffer = static_cast<float *>( realloc( m_ports[p].m_buffer, sizeof( float ) * newSize ) );
-			memset( m_ports[p].m_buffer, 0, sizeof( float ) * newSize );
-		}
-	}
-	lv2()->setBufferSize( newSize );
-}
-
-
-
-
-void Lv2Plugin::run( const fpp_t nframes )
-{
-	if( !m_instance )
-	{
-		return;
-	}
-
-	lv2()->setRate( engine::mixer()->framesPerPeriod() );
-	resizeBuffers( nframes );
-	for( int i = 0; i < m_ports.size(); ++i )
-	{
-		m_ports[i].convertEvents();
-		lilv_instance_connect_port( m_instance, i, m_ports[i].buffer() );
 	}
 
 	lilv_instance_run( m_instance, static_cast<uint32_t>( nframes ) );
@@ -253,91 +294,42 @@ void Lv2Plugin::run( const fpp_t nframes )
 
 
 
-static void setPortValue( const char * symbol, void * data, const void * value, uint32_t size, uint32_t type )
+LV2_URID Lv2Plugin::mapUri( LV2_URID_Map_Handle handle, const char * uri )
 {
-	Lv2Plugin * self = static_cast<Lv2Plugin *>( data );
-	Lv2Port * port = self->port( symbol );
-	if( !port )
+	for( int i = 0; i < s_uriMap.size(); ++i )
 	{
-		fprintf( stderr, "error: Preset port `%s' is missing\n", symbol );
-		return;
+		if( !strcmp( uri, s_uriMap[i] ) )
+		{
+			return i + 1;
+		}
 	}
-
-	float fvalue;
-	if( type == atom_Float )
-	{
-		fvalue = *static_cast<const float *>( value );
-	}
-	else if( type == atom_Double )
-	{
-		fvalue = *static_cast<const double *>( value );
-	}
-	else if( type == atom_Int )
-	{
-		fvalue = *static_cast<const int32_t*>( value );
-	}
-	else if( type == atom_Long )
-	{
-		fvalue = *static_cast<const int64_t*>( value );
-	}
-	else
-	{
-		fprintf( stderr, "error: Preset `%s' value has bad type\n", symbol );
-		return;
-	}
-
-	port->setValue( fvalue );
+	s_uriMap.push_back( uri );
+	return s_uriMap.size();
 }
 
 
 
 
-void Lv2Plugin::loadState( const char * stateString )
+const char* Lv2Plugin::unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid )
 {
-	LilvState * state = lilv_state_new_from_string( lv2()->world(), &lv2()->urid__map, stateString );
-	lilv_state_restore( state, m_instance, setPortValue, this, 0, NULL );
-	lilv_state_free( state );
-}
-
-
-
-
-static const void * getPortValue( const char * symbol, void * data, uint32_t * size, uint32_t * type )
-{
-	Lv2Plugin * self = static_cast<Lv2Plugin *>( data );
-	Lv2Port * port = self->port( symbol );
-
-	if( port && port->flow() == FlowInput && port->type() == TypeControl )
+	if( !urid || urid > s_uriMap.size() )
 	{
-		*size = sizeof( float );
-		*type = atom_Float;
-		return port->buffer();
+		return NULL;
 	}
-	*size = 0;
-	*type = 0;
-	return NULL;
+	return s_uriMap[urid - 1];
 }
 
 
 
 
-void Lv2Plugin::saveState()
+bool Lv2Plugin::featureIsSupported( const char * uri )
 {
-	LilvState * state = lilv_state_new_from_instance( plugin(), instance(), &lv2()->urid__map, NULL, NULL, NULL, NULL, getPortValue, this, LV2_STATE_IS_POD | LV2_STATE_IS_PORTABLE, NULL );
-	m_stateString = lilv_state_to_string( lv2()->world(), &lv2()->urid__map, &lv2()->urid__unmap, state, "urn:lmms:state", NULL );
-	lilv_state_free( state );
-}
-
-
-
-
-void Lv2Plugin::loadPreset( int index )
-{
-	const LilvNode * preset = descriptor()->preset( index )->node();
-	LilvState * state = lilv_state_new_from_world( lv2()->world(), &lv2()->urid__map, preset );
-	if( state )
+	for( int i = 0; features[i]; ++i )
 	{
-		lilv_state_restore( state, m_instance, setPortValue, this, 0, NULL );
+		if( !strcmp( features[i]->URI, uri ) )
+		{
+			return true;
+		}
 	}
-	lilv_state_free( state );
+	return false;
 }
