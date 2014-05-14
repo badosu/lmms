@@ -53,7 +53,8 @@ Plugin * PLUGIN_EXPORT lmms_plugin_main( Model *, void * data )
 
 LovelyInstrument::LovelyInstrument( InstrumentTrack * track ) :
 	Instrument( track, &lovely_plugin_descriptor ),
-	m_plugin( NULL )
+	m_plugin( NULL ),
+	m_pluginMutex()
 {
 	InstrumentPlayHandle * handle = new InstrumentPlayHandle( this );
 	engine::mixer()->addPlayHandle( handle );
@@ -84,11 +85,16 @@ PluginView * LovelyInstrument::instantiateView( QWidget * parent )
 
 bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & time )
 {
+	bool r = true;
+
+	m_pluginMutex.lock();
 	if( m_plugin && m_plugin->valid() )
 	{
-		return m_plugin->writeEvent( ev, time );
+		r = m_plugin->writeEvent( ev, time );
 	}
-	return true;
+	m_pluginMutex.unlock();
+
+	return r;
 }
 
 
@@ -96,8 +102,10 @@ bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & t
 
 void LovelyInstrument::play( sampleFrame * buffer )
 {
+	m_pluginMutex.lock();
 	if( !m_plugin || !m_plugin->valid() )
 	{
+		m_pluginMutex.unlock();
 		return;
 	}
 
@@ -116,6 +124,7 @@ void LovelyInstrument::play( sampleFrame * buffer )
 	}
 
 	instrumentTrack()->processAudioBuffer( buffer, nframes, NULL );
+	m_pluginMutex.unlock();
 }
 
 
@@ -131,6 +140,7 @@ void LovelyInstrument::saveSettings( QDomDocument & doc, QDomElement & self )
 
 void LovelyInstrument::loadSettings( const QDomElement & self )
 {
+	m_pluginMutex.unlock();
 	if( m_plugin )
 	{
 		delete m_plugin;
@@ -147,6 +157,7 @@ void LovelyInstrument::loadSettings( const QDomElement & self )
 	}
 
 	m_uri = self.attribute( "uri" );
+	m_pluginMutex.unlock();
 }
 
 
