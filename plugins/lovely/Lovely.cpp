@@ -136,7 +136,16 @@ void LovelyInstrument::loadSettings( const QDomElement & self )
 		delete m_plugin;
 	}
 
-	m_plugin = new Lv2Plugin( lv2->descriptor( self.attribute( "uri" ).toUtf8().constData() ), engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
+	Lv2PluginDescriptor * descriptor = lv2->descriptor( self.attribute( "uri" ).toUtf8().constData() );
+	if( !descriptor )
+	{
+		fprintf( stderr, "Can't find <%s>\n", self.attribute( "uri" ).toUtf8().constData() );
+	}
+	else
+	{
+		m_plugin = new Lv2Plugin( descriptor, engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
+	}
+
 	m_uri = self.attribute( "uri" );
 }
 
