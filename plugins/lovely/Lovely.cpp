@@ -14,6 +14,11 @@
 
 
 
+static Lv2Base * lv2 = findLv2();
+
+
+
+
 extern "C"
 {
 
@@ -79,7 +84,7 @@ PluginView * LovelyInstrument::instantiateView( QWidget * parent )
 
 bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & time )
 {
-	if( m_plugin->valid() )
+	if( m_plugin && m_plugin->valid() )
 	{
 		return m_plugin->writeEvent( ev, time );
 	}
@@ -91,7 +96,7 @@ bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & t
 
 void LovelyInstrument::play( sampleFrame * buffer )
 {
-	if( !m_plugin->valid() )
+	if( !m_plugin || !m_plugin->valid() )
 	{
 		return;
 	}
@@ -99,8 +104,8 @@ void LovelyInstrument::play( sampleFrame * buffer )
 	fpp_t nframes = engine::mixer()->framesPerPeriod();
 	m_plugin->resizeBuffers( nframes );
 
-	float * left = m_plugin->outputBuffer( 0, false );
-	float * right = m_plugin->outputBuffer( 1, true );
+	float * left = m_plugin->buffer( LeftOut );
+	float * right = m_plugin->buffer( RightOut );
 
 	m_plugin->run( nframes );
 
@@ -131,7 +136,7 @@ void LovelyInstrument::loadSettings( const QDomElement & self )
 		delete m_plugin;
 	}
 
-	m_plugin = new Lv2Plugin( self.attribute( "uri" ).toUtf8().constData(), engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
+	m_plugin = new Lv2Plugin( lv2->descriptor( self.attribute( "uri" ).toUtf8().constData() ), engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
 	m_uri = self.attribute( "uri" );
 }
 
@@ -142,10 +147,6 @@ LovelyView::LovelyView( Instrument * instrument, QWidget * parent ) :
 	InstrumentView( instrument, parent )
 {
 	m_instrument = static_cast<LovelyInstrument *>( instrument );
-	for( int i = 0; i < m_instrument->m_plugin->pluginUris().size(); ++i )
-	{
-		printf( "%d:\t%s\n", i, m_instrument->m_plugin->pluginUris()[i] );
-	}
 }
 
 

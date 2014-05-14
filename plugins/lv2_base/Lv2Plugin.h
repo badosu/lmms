@@ -36,11 +36,12 @@
 #include <lv2/lv2plug.in/ns/ext/urid/urid.h>
 #include <lv2/lv2plug.in/ns/lv2core/lv2.h>
 
-#include <vector>
+#include <QVector>
 #include <QtGlobal>
 
 #include "MidiEvent.h"
 #include "MidiTime.h"
+#include "Lv2Base.h"
 
 #include "lv2_evbuf.h"
 
@@ -49,48 +50,13 @@
 class Lv2Port
 {
 public:
-	enum Flow {
-		FlowUnknown,
-		FlowInput,
-		FlowOutput,
-	};
+	Lv2PortFlow flow() const { return m_descriptor->flow(); }
+	Lv2PortType type() const { return m_descriptor->type(); }
+	const char * symbol() const { return m_descriptor->symbol(); }
+	const char * name() const { return m_descriptor->name(); }
 
-	enum Type {
-		TypeUnknown,
-		TypeControl,
-		TypeAudio,
-		TypeEvent
-	};
-
-	Flow flow() const
-	{
-		return m_flow;
-	}
-
-	Type type() const
-	{
-		return m_type;
-	}
-
-	const char * symbol() const
-	{
-		return m_symbol;
-	}
-
-	const char * name() const
-	{
-		return m_name;
-	}
-
-	void setValue( float value )
-	{
-		m_value = value;
-	}
-
-	float value() const
-	{
-		return m_value;
-	}
+	void setValue( float value ) { m_value = value; }
+	float value() const { return m_value; }
 
 	void * buffer();
 	void reset();
@@ -98,16 +64,9 @@ public:
 	bool writeEvent( const MidiEvent& event, const MidiTime& time );
 
 private:
-	Flow m_flow;
-	Type m_type;
-	const char * m_symbol;
-	const char * m_name;
+	Lv2PortDescriptor * m_descriptor;
 
-	float m_minimum;
-	float m_maximum;
-	float m_default;
 	float m_value;
-
 	LV2_Evbuf * m_evbuf;
 	float * m_buffer;
 
@@ -120,18 +79,10 @@ private:
 class Lv2Plugin
 {
 public:
-	Lv2Plugin( const char * uri, double rate, fpp_t bufferSize );
+	Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t bufferSize );
 	~Lv2Plugin();
 
-	const std::vector<const char *> pluginUris()
-	{
-		return s_pluginUris;
-	}
-
-	inline bool valid()
-	{
-		return !!m_instance;
-	}
+	inline bool valid() { return !!m_instance; }
 
 	bool instantiate( double rate );
 	void createPorts();
@@ -153,93 +104,27 @@ public:
 
 	inline bool writeEvent( const MidiEvent& event, const MidiTime& time )
 	{
-		if( m_midiIn != -1 )
+		if( m_descriptor->portIndex( EventsIn ) != -1 )
 		{
-			return m_ports[m_midiIn].writeEvent( event, time );
+			return m_ports[m_descriptor->portIndex( EventsIn )].writeEvent( event, time );
 		}
 		return false;
 	}
 
-	inline uint32_t numPorts()
-	{
-		if( m_plugin )
-		{
-			return lilv_plugin_get_num_ports( m_plugin );
-		}
-		return 0;
-	}
-
-	inline float * inputBuffer( int index, bool wrap )
-	{
-		int i = wrap ? index % qMax( m_inputs.size(), 1ul ) : index;
-		if( m_inputs[i] )
-		{
-			return static_cast<float *>( m_ports[m_inputs[i]].buffer() );
-		}
-		return NULL;
-	}
-
-	inline float * outputBuffer( int index, bool wrap )
-	{
-		int i = wrap ? index % qMax( m_outputs.size(), 1ul ) : index;
-		if( m_outputs[i] )
-		{
-			return static_cast<float *>( m_ports[m_outputs[i]].buffer() );
-		}
-		return NULL;
-	}
+	uint32_t numPorts() { return m_descriptor->numPorts(); }
 
 	void resizeBuffers( fpp_t newSize );
 	void run( const fpp_t nframes );
 
-	enum URIs
+	float * buffer( PortDesignation designation )
 	{
-		atom_AtomPort = 1,
-		atom_Chunk,
-		atom_Float,
-		atom_Int,
-		atom_Sequence,
-		bufsz_maxBlockLength,
-		bufsz_minBlockLength,
-		bufsz_sequenceSize,
-		ev_EventPort,
-		lv2_AudioPort,
-		lv2_ControlPort,
-		lv2_InputPort,
-		lv2_OutputPort,
-		lv2_control,
-		lv2_name,
-		midi_MidiEvent,
-		param_sampleRate,
-		pg_left,
-		pg_right,
-		rdfs_label,
-		urid_map,
-		urid_unmap
-	};
+		return static_cast<float *>( m_ports[m_descriptor->portIndex( designation )].buffer() );
+	}
 
 private:
-	static std::vector<const char *> s_uriMap;
-	static std::vector<LilvNode *> s_nodeMap;
-	static std::vector<const char *> s_pluginUris;
-
-	static LV2_URID mapUri( LV2_URID_Map_Handle handle, const char * uri );
-	static const char* unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid );
-
-	bool featureIsSupported( const char * uri );
-
-	static LilvWorld * s_world;
-	static LilvPlugins * s_plugins;
-	static long s_refcount;
-
-	LilvPlugin * m_plugin;
+	Lv2PluginDescriptor * m_descriptor;
 	LilvInstance * m_instance;
-	std::vector<Lv2Port> m_ports;
+	QVector<Lv2Port> m_ports;
 
 	fpp_t m_bufferSize;
-
-	uint32_t m_midiIn;
-	std::vector<uint32_t> m_inputs;
-	std::vector<uint32_t> m_outputs;
-
 };
