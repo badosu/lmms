@@ -2,6 +2,8 @@
 #ifndef LOVELY_H
 #define LOVELY_H
 
+#include <QtCore/QMutex>
+
 #include "Instrument.h"
 #include "InstrumentView.h"
 
@@ -21,10 +23,7 @@ public:
 
 	virtual PluginView * instantiateView( QWidget * parent );
 
-	inline virtual bool isMidiBased() const
-	{
-		return true;
-	}
+	virtual Flags flags() const { return IsSingleStreamed | IsMidiBased; }
 
 	virtual bool handleMidiEvent( const MidiEvent & event, const MidiTime & time );
 	virtual void play( sampleFrame * buffer );
@@ -34,6 +33,7 @@ public:
 
 private:
 	Lv2Plugin * m_plugin;
+	QMutex m_pluginMutex;
 
 	QString m_uri;
 
