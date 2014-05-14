@@ -140,7 +140,7 @@ void LovelyInstrument::saveSettings( QDomDocument & doc, QDomElement & self )
 
 void LovelyInstrument::loadSettings( const QDomElement & self )
 {
-	m_pluginMutex.unlock();
+	m_pluginMutex.lock();
 	if( m_plugin )
 	{
 		delete m_plugin;
