@@ -52,7 +52,6 @@ LovelyInstrument::LovelyInstrument( InstrumentTrack * track ) :
 {
 	InstrumentPlayHandle * handle = new InstrumentPlayHandle( this );
 	engine::mixer()->addPlayHandle( handle );
-	m_plugin = new Lv2Plugin( "http://www.openavproductions.com/sorcer", engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
 }
 
 
@@ -61,7 +60,10 @@ LovelyInstrument::LovelyInstrument( InstrumentTrack * track ) :
 LovelyInstrument::~LovelyInstrument()
 {
 	engine::mixer()->removePlayHandles( instrumentTrack() );
-	delete m_plugin;
+	if( m_plugin )
+	{
+		delete m_plugin;
+	}
 }
 
 
@@ -77,7 +79,11 @@ PluginView * LovelyInstrument::instantiateView( QWidget * parent )
 
 bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & time )
 {
-	return m_plugin->writeEvent( ev, time );
+	if( m_plugin->valid() )
+	{
+		return m_plugin->writeEvent( ev, time );
+	}
+	return true;
 }
 
 
@@ -85,6 +91,11 @@ bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & t
 
 void LovelyInstrument::play( sampleFrame * buffer )
 {
+	if( !m_plugin->valid() )
+	{
+		return;
+	}
+
 	fpp_t nframes = engine::mixer()->framesPerPeriod();
 	m_plugin->resizeBuffers( nframes );
 
@@ -100,6 +111,48 @@ void LovelyInstrument::play( sampleFrame * buffer )
 	}
 
 	instrumentTrack()->processAudioBuffer( buffer, nframes, NULL );
+}
+
+
+
+
+void LovelyInstrument::saveSettings( QDomDocument & doc, QDomElement & self )
+{
+	self.setAttribute( "uri", m_uri );
+}
+
+
+
+
+void LovelyInstrument::loadSettings( const QDomElement & self )
+{
+	if( m_plugin )
+	{
+		delete m_plugin;
+	}
+
+	m_plugin = new Lv2Plugin( self.attribute( "uri" ).toUtf8().constData(), engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
+	m_uri = self.attribute( "uri" );
+}
+
+
+
+
+LovelyView::LovelyView( Instrument * instrument, QWidget * parent ) :
+	InstrumentView( instrument, parent )
+{
+	m_instrument = static_cast<LovelyInstrument *>( instrument );
+	for( int i = 0; i < m_instrument->m_plugin->pluginUris().size(); ++i )
+	{
+		printf( "%d:\t%s\n", i, m_instrument->m_plugin->pluginUris()[i] );
+	}
+}
+
+
+
+
+LovelyView::~LovelyView()
+{
 }
 
 
