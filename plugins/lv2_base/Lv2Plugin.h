@@ -123,6 +123,16 @@ public:
 	Lv2Plugin( const char * uri, double rate, fpp_t bufferSize );
 	~Lv2Plugin();
 
+	const std::vector<const char *> pluginUris()
+	{
+		return s_pluginUris;
+	}
+
+	inline bool valid()
+	{
+		return !!m_instance;
+	}
+
 	bool instantiate( double rate );
 	void createPorts();
 
@@ -180,7 +190,6 @@ public:
 	}
 
 	void resizeBuffers( fpp_t newSize );
-
 	void run( const fpp_t nframes );
 
 	enum URIs
@@ -212,6 +221,7 @@ public:
 private:
 	static std::vector<const char *> s_uriMap;
 	static std::vector<LilvNode *> s_nodeMap;
+	static std::vector<const char *> s_pluginUris;
 
 	static LV2_URID mapUri( LV2_URID_Map_Handle handle, const char * uri );
 	static const char* unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid );

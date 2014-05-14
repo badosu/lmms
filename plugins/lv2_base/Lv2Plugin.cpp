@@ -27,11 +27,13 @@
 #include "Lv2Plugin.h"
 
 
-long Lv2Plugin::s_refcount = 0;
 std::vector<const char *> Lv2Plugin::s_uriMap;
 std::vector<LilvNode *> Lv2Plugin::s_nodeMap;
-LilvWorld * Lv2Plugin::s_world;
+std::vector<const char *> Lv2Plugin::s_pluginUris;
+
 LilvPlugins * Lv2Plugin::s_plugins;
+LilvWorld * Lv2Plugin::s_world;
+long Lv2Plugin::s_refcount = 0;
 
 
 #define NODE(X) s_nodeMap[X-1]
@@ -43,7 +45,8 @@ static LV2_URID_Unmap urid__unmap = { NULL, NULL };
 static LV2_Feature mapFeature = { LV2_URID__map, &urid__map };
 static LV2_Feature unmapFeature = { LV2_URID__unmap, &urid__unmap };
 
-//~ static LV2_Options_Option options[5];
+/*
+static LV2_Options_Option options[5];
 static LV2_Feature optionsFeature = { LV2_OPTIONS__options, NULL };
 
 static LV2_Feature bufSizeFeatures[3] = {
@@ -51,13 +54,14 @@ static LV2_Feature bufSizeFeatures[3] = {
 	{ LV2_BUF_SIZE__fixedBlockLength, NULL },
 	{ LV2_BUF_SIZE__boundedBlockLength, NULL }
 };
+ */
 
 static const LV2_Feature* features[7] = {
 	&mapFeature, &unmapFeature,
-	&optionsFeature,
-	&bufSizeFeatures[0],
-	&bufSizeFeatures[1],
-	&bufSizeFeatures[2],
+	//~ &optionsFeature,
+	//~ &bufSizeFeatures[0],
+	//~ &bufSizeFeatures[1],
+	//~ &bufSizeFeatures[2],
 	NULL
 };
 
@@ -102,8 +106,6 @@ bool Lv2Port::writeEvent( const MidiEvent& event, const MidiTime& time )
 	msg[1] = event.key() & 0x7f;
 	msg[2] = event.velocity();
 
-	printf( "%x, %x, %x\n", msg[0], msg[1], msg[2] );
-
 	LV2_Evbuf_Iterator iter = lv2_evbuf_end( m_evbuf );
 	return lv2_evbuf_write( &iter, time, 0, Lv2Plugin::midi_MidiEvent, 3, msg );
 }
@@ -114,7 +116,6 @@ bool Lv2Port::writeEvent( const MidiEvent& event, const MidiTime& time )
 Lv2Plugin::Lv2Plugin( const char * uri, double rate, fpp_t bufferSize ) :
 	m_midiIn( -1 )
 {
-	printf( "%d\n", (int)s_refcount );
 	if( s_refcount++ == 0 )
 	{
 		s_world = lilv_world_new();
@@ -153,6 +154,13 @@ Lv2Plugin::Lv2Plugin( const char * uri, double rate, fpp_t bufferSize ) :
 			s_nodeMap.push_back( node );
 		}
 
+		LILV_FOREACH( plugins, i, s_plugins )
+		{
+			const LilvPlugin * plugin = lilv_plugins_get( s_plugins, i );
+			const LilvNode * node = lilv_plugin_get_uri( plugin );
+			s_pluginUris.push_back( lilv_node_as_uri( node ) );
+		}
+
 	}
 
 	LilvNode * node = lilv_new_uri( s_world, uri );
@@ -169,6 +177,8 @@ Lv2Plugin::Lv2Plugin( const char * uri, double rate, fpp_t bufferSize ) :
 
 	createPorts();
 	activate();
+
+	run( bufferSize );
 }
 
 
@@ -176,14 +186,17 @@ Lv2Plugin::Lv2Plugin( const char * uri, double rate, fpp_t bufferSize ) :
 
 Lv2Plugin::~Lv2Plugin()
 {
-	deactivate();
-	cleanup();
-
-	for( uint32_t p = 0; p < m_ports.size(); ++p )
+	if( m_instance )
 	{
-		if( m_ports[p].type() == Lv2Port::TypeAudio && m_ports[p].m_buffer )
+		deactivate();
+		cleanup();
+
+		for( uint32_t p = 0; p < m_ports.size(); ++p )
 		{
-			free( m_ports[p].m_buffer );
+			if( m_ports[p].type() == Lv2Port::TypeAudio && m_ports[p].m_buffer )
+			{
+				free( m_ports[p].m_buffer );
+			}
 		}
 	}
 
@@ -195,6 +208,7 @@ Lv2Plugin::~Lv2Plugin()
 		}
 		s_nodeMap.clear();
 		s_uriMap.clear();
+		s_pluginUris.clear();
 		lilv_world_free( s_world );
 	}
 }
@@ -245,10 +259,7 @@ void Lv2Plugin::createPorts()
 		{
 			port.m_type = Lv2Port::TypeAudio;
 			port.m_buffer = static_cast<float *>( malloc( sizeof( float ) * m_bufferSize ) );
-			for( uint32_t i = 0; i < m_bufferSize; ++i )
-			{
-				port.m_buffer[i] = 0;
-			}
+			memset( port.m_buffer, 0, sizeof( float ) * m_bufferSize );
 			switch( port.flow() )
 			{
 				case Lv2Port::FlowInput:
@@ -270,6 +281,7 @@ void Lv2Plugin::createPorts()
 			}
 			LV2_Evbuf_Type type = lilv_port_is_a( m_plugin, portdesc, NODE( atom_AtomPort ) ) ? LV2_EVBUF_ATOM : LV2_EVBUF_EVENT;
 			port.m_evbuf = lv2_evbuf_new( 1024, type, atom_Chunk, atom_Sequence );
+			lv2_evbuf_reset( port.m_evbuf, port.flow() == Lv2Port::FlowInput );
 		}
 
 		m_ports.push_back( port );
@@ -305,10 +317,7 @@ void Lv2Plugin::resizeBuffers( fpp_t newSize )
 		if( m_ports[p].type() == Lv2Port::TypeAudio )
 		{
 			m_ports[p].m_buffer = static_cast<float *>( realloc( m_ports[p].m_buffer, sizeof( float ) * newSize ) );
-			for( uint32_t i = 0; i < newSize; ++i )
-			{
-				m_ports[p].m_buffer[i] = 0;
-			}
+			memset( m_ports[p].m_buffer, 0, sizeof( float ) * newSize );
 		}
 	}
 }
@@ -318,6 +327,12 @@ void Lv2Plugin::resizeBuffers( fpp_t newSize )
 
 void Lv2Plugin::run( const fpp_t nframes )
 {
+	if( !m_instance )
+	{
+		return;
+	}
+
+	resizeBuffers( nframes );
 	for( int i = 0; i < m_ports.size(); ++i )
 	{
 		lilv_instance_connect_port( m_instance, i, m_ports[i].buffer() );

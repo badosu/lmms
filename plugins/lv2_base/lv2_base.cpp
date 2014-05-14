@@ -40,7 +40,7 @@ Plugin::Descriptor PLUGIN_EXPORT lv2base_plugin_descriptor =
 	Plugin::Library,
 	NULL,
 	NULL
-} ;
+};
 
 }
 
