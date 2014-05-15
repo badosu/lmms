@@ -141,32 +141,51 @@ void LovelyInstrument::saveSettings( QDomDocument & doc, QDomElement & self )
 void LovelyInstrument::loadSettings( const QDomElement & self )
 {
 	m_pluginMutex.lock();
-	if( m_plugin )
-	{
-		delete m_plugin;
-	}
 
-	Lv2PluginDescriptor * descriptor = lv2->descriptor( self.attribute( "uri" ).toUtf8().constData() );
-	if( !descriptor )
-	{
-		fprintf( stderr, "Can't find <%s>\n", self.attribute( "uri" ).toUtf8().constData() );
-	}
-	else
-	{
-		m_plugin = new Lv2Plugin( descriptor, engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
-	}
-
+	loadPlugin( self.attribute( "uri" ).toUtf8().constData() );
 	m_uri = self.attribute( "uri" );
+
 	m_pluginMutex.unlock();
 }
 
 
 
 
+void LovelyInstrument::loadPlugin( const char * uri )
+{
+	if( m_plugin )
+	{
+		delete m_plugin;
+	}
+
+	Lv2PluginDescriptor * descriptor = lv2->descriptor( uri );
+	if( !descriptor )
+	{
+		fprintf( stderr, "Can't find <%s>\n", uri );
+	}
+	else
+	{
+		m_plugin = new Lv2Plugin( descriptor, engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
+	}
+	m_uri = uri;
+}
+
+
+
+
 LovelyView::LovelyView( Instrument * instrument, QWidget * parent ) :
-	InstrumentView( instrument, parent )
+	InstrumentView( instrument, parent ),
+	m_listWidget( this )
 {
 	m_instrument = static_cast<LovelyInstrument *>( instrument );
+	//~ m_listWidget.setFixedWidth( 200 );
+	m_listWidget.setFixedHeight( 200 );
+	connect( &m_listWidget, SIGNAL( itemDoubleClicked(QListWidgetItem*) ), this, SLOT( loadFromList(QListWidgetItem*) ) );
+
+	for( uint32_t i = 0; i < lv2->numberOfPlugins(); ++i )
+	{
+		m_listWidget.addItem( QString( lv2->descriptor( i )->name() ) );
+	}
 }
 
 
@@ -174,6 +193,16 @@ LovelyView::LovelyView( Instrument * instrument, QWidget * parent ) :
 
 LovelyView::~LovelyView()
 {
+}
+
+
+
+
+void LovelyView::loadFromList( QListWidgetItem * item )
+{
+	m_instrument->m_pluginMutex.lock();
+	m_instrument->loadPlugin( lv2->descriptor( m_listWidget.currentRow() )->uri() );
+	m_instrument->m_pluginMutex.unlock();
 }
 
 

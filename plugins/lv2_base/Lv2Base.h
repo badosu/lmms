@@ -186,6 +186,8 @@ public:
 	static const LV2_Feature* s_features[];
 
 	Lv2PluginDescriptor * descriptor( const char * uri );
+	Lv2PluginDescriptor * descriptor( uint32_t index );
+	uint32_t numberOfPlugins() const { return s_descriptors.size(); }
 
 private:
 	static QVector<const char *> s_uriMap;
