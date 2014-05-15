@@ -212,6 +212,14 @@ Lv2PluginDescriptor * Lv2Base::descriptor( const char * uri )
 
 
 
+Lv2PluginDescriptor * Lv2Base::descriptor( uint32_t index )
+{
+	return s_descriptors[index];
+}
+
+
+
+
 // We need a single instance of this
 static Lv2Base lv2;
 

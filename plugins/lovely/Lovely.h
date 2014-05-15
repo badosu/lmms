@@ -4,6 +4,8 @@
 
 #include <QtCore/QMutex>
 
+#include <QListWidget>
+
 #include "Instrument.h"
 #include "InstrumentView.h"
 
@@ -31,6 +33,8 @@ public:
 	void saveSettings( QDomDocument & doc, QDomElement & self );
 	void loadSettings( const QDomElement & self );
 
+	void loadPlugin( const char * uri );
+
 private:
 	Lv2Plugin * m_plugin;
 	QMutex m_pluginMutex;
@@ -50,8 +54,13 @@ public:
 	LovelyView( Instrument * instrument, QWidget * parent );
 	virtual ~LovelyView();
 
+public slots:
+	void loadFromList( QListWidgetItem * item );
+
 private:
 	LovelyInstrument * m_instrument;
+
+	QListWidget m_listWidget;
 };
 
 #endif
