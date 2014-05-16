@@ -142,6 +142,21 @@ bool Lv2Plugin::instantiate( double rate )
 
 
 
+Lv2Port * Lv2Plugin::port( const char * symbol )
+{
+	for( int i = 0; i < m_ports.size(); ++i )
+	{
+		if( !strcmp( symbol, m_ports[i].symbol() ) )
+		{
+			return &m_ports[i];
+		}
+	}
+	return NULL;
+}
+
+
+
+
 void Lv2Plugin::resizeBuffers( fpp_t newSize )
 {
 	if( m_bufferSize >= newSize )

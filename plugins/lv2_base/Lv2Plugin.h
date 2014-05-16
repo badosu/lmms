@@ -88,6 +88,9 @@ public:
 	bool instantiate( double rate );
 	void createPorts();
 
+	const LilvPlugin * plugin() const { return m_descriptor->plugin(); }
+	LilvInstance * instance() const { return m_instance; }
+
 	inline void activate()
 	{
 		lilv_instance_activate( m_instance );
@@ -113,6 +116,7 @@ public:
 	}
 
 	uint32_t numPorts() { return m_descriptor->numPorts(); }
+	Lv2Port * port( const char * symbol );
 
 	void resizeBuffers( fpp_t newSize );
 	void run( const fpp_t nframes );

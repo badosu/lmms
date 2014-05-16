@@ -36,6 +36,7 @@
 #include <lv2/lv2plug.in/ns/ext/options/options.h>
 #include <lv2/lv2plug.in/ns/ext/parameters/parameters.h>
 #include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
+#include <lv2/lv2plug.in/ns/ext/state/state.h>
 #include <lv2/lv2plug.in/ns/ext/urid/urid.h>
 #include <lv2/lv2plug.in/ns/lv2core/lv2.h>
 
@@ -143,6 +144,8 @@ public:
 	Lv2PluginDescriptor( const LilvPlugin * plugin );
 	~Lv2PluginDescriptor();
 
+	const LilvPlugin * plugin() const { return m_plugin; }
+
 	uint32_t numPorts() { return m_numPorts; }
 	int32_t portIndex( PortDesignation designation ) { return m_portIndex[designation]; }
 	Lv2PortDescriptor * portDescriptor( uint32_t index ) { return m_ports[index]; }
@@ -183,24 +186,36 @@ public:
 
 	void init();
 
-	bool works() const { return !!s_world; }
+	LilvWorld * world() const { return s_world; }
 	LilvPlugins * plugins() const { return s_plugins; }
 	LilvNode * node( URIs id ) { return s_nodeMap[id - 1]; }
 
 	bool featureIsSupported( const char * uri );
+
+	static LV2_URID_Map urid__map;
+	static LV2_URID_Unmap urid__unmap;
+
+	static LV2_Feature mapFeature;
+	static LV2_Feature unmapFeature;
+
+	//~ static LV2_Options_Option options[5];
+	//~ static LV2_Feature optionsFeature;
+
+	//~ static LV2_Feature bufSizeFeatures[3];
+
 	static const LV2_Feature* s_features[];
 
 	Lv2PluginDescriptor * descriptor( const char * uri );
 	Lv2PluginDescriptor * descriptor( uint32_t index );
 	uint32_t numberOfPlugins() const { return s_descriptors.size(); }
 
+	static LV2_URID mapUri( LV2_URID_Map_Handle handle, const char * uri );
+	static const char* unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid );
+
 private:
 	static QVector<const char *> s_uriMap;
 	static QVector<LilvNode *> s_nodeMap;
 	static QVector<Lv2PluginDescriptor *> s_descriptors;
-
-	static LV2_URID mapUri( LV2_URID_Map_Handle handle, const char * uri );
-	static const char* unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid );
 
 	static LilvWorld * s_world;
 	static LilvPlugins * s_plugins;
