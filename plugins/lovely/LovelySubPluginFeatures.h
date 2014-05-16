@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
- * This file is part of LMMS - http://lmms.sourceforge.net
+ * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -29,7 +29,7 @@
 #include "Plugin.h"
 
 
-class PLUGIN_EXPORT LovelySubPluginFeatures : public Plugin::Descriptor::SubPluginFeatures
+class LovelySubPluginFeatures : public Plugin::Descriptor::SubPluginFeatures
 {
 public:
 	LovelySubPluginFeatures( Plugin::PluginTypes type );

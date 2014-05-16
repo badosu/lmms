@@ -73,6 +73,7 @@ enum URIs
 	lv2_AudioPort,
 	lv2_ControlPort,
 	lv2_InputPort,
+	lv2_InstrumentPlugin,
 	lv2_OutputPort,
 	lv2_control,
 	lv2_name,
@@ -146,7 +147,8 @@ public:
 	int32_t portIndex( PortDesignation designation ) { return m_portIndex[designation]; }
 	Lv2PortDescriptor * portDescriptor( uint32_t index ) { return m_ports[index]; }
 
-	bool compatible() const { return m_compatible; }
+	bool isCompatible() const { return m_isCompatible; }
+	bool isInstrument() const { return m_isInstrument; }
 
 	const char * uri() const { return lilv_node_as_uri( lilv_plugin_get_uri( m_plugin ) ); }
 	const char * name() const
@@ -162,7 +164,8 @@ private:
 	const LilvPlugin * m_plugin;
 	uint32_t m_numPorts;
 	int32_t m_portIndex[NumPortDesignations];
-	bool m_compatible;
+	bool m_isCompatible;
+	bool m_isInstrument;
 
 	const char * m_uri;
 
@@ -178,7 +181,9 @@ public:
 	Lv2Base();
 	~Lv2Base();
 
-	LilvWorld * world() const { return s_world; }
+	void init();
+
+	bool works() const { return !!s_world; }
 	LilvPlugins * plugins() const { return s_plugins; }
 	LilvNode * node( URIs id ) { return s_nodeMap[id - 1]; }
 
@@ -204,4 +209,4 @@ private:
 
 
 
-Lv2Base * findLv2();
+Lv2Base * lv2();

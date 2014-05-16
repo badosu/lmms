@@ -88,6 +88,32 @@ const LV2_Feature* Lv2Base::s_features[] = {
 
 Lv2Base::Lv2Base()
 {
+}
+
+
+
+
+Lv2Base::~Lv2Base()
+{
+	for( int i = 0; i < s_nodeMap.size(); ++i )
+	{
+		lilv_node_free( s_nodeMap[i] );
+	}
+	for( int i = 0; i < s_descriptors.size(); ++i )
+	{
+		delete s_descriptors[i];
+	}
+	s_nodeMap.clear();
+	s_uriMap.clear();
+	s_descriptors.clear();
+	lilv_world_free( s_world );
+}
+
+
+
+
+void Lv2Base::init()
+{
 	s_world = lilv_world_new();
 	lilv_world_load_all( s_world );
 	s_plugins = const_cast<LilvPlugins *>( lilv_world_get_all_plugins( s_world ) );
@@ -104,6 +130,7 @@ Lv2Base::Lv2Base()
 	s_uriMap.push_back( LV2_CORE__AudioPort );
 	s_uriMap.push_back( LV2_CORE__ControlPort );
 	s_uriMap.push_back( LV2_CORE__InputPort );
+	s_uriMap.push_back( LV2_CORE__InstrumentPlugin );
 	s_uriMap.push_back( LV2_CORE__OutputPort );
 	s_uriMap.push_back( LV2_CORE__control );
 	s_uriMap.push_back( LV2_CORE__name );
@@ -128,27 +155,15 @@ Lv2Base::Lv2Base()
 	{
 		const LilvPlugin * plugin = lilv_plugins_get( s_plugins, i );
 		Lv2PluginDescriptor * desc = new Lv2PluginDescriptor( plugin );
-		s_descriptors.push_back( desc );
+		if( desc->isCompatible() )
+		{
+			s_descriptors.push_back( desc );
+		}
+		else
+		{
+			delete desc;
+		}
 	}
-}
-
-
-
-
-Lv2Base::~Lv2Base()
-{
-	for( int i = 0; i < s_nodeMap.size(); ++i )
-	{
-		lilv_node_free( s_nodeMap[i] );
-	}
-	for( int i = 0; i < s_descriptors.size(); ++i )
-	{
-		delete s_descriptors[i];
-	}
-	s_nodeMap.clear();
-	s_uriMap.clear();
-	s_descriptors.clear();
-	lilv_world_free( s_world );
 }
 
 
@@ -221,12 +236,16 @@ Lv2PluginDescriptor * Lv2Base::descriptor( uint32_t index )
 
 
 // We need a single instance of this
-static Lv2Base lv2;
+static Lv2Base lv2Base;
 
-// and a single way to find it
-Lv2Base * findLv2()
+// and a single way to get it
+Lv2Base * lv2()
 {
-	return &lv2;
+	if( !lv2Base.works() )
+	{
+		lv2Base.init();
+	}
+	return &lv2Base;
 }
 
 
@@ -246,17 +265,20 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 	m_numPorts = lilv_plugin_get_num_ports( m_plugin );
 
 	// Compatibility
-	m_compatible = true;
+	m_isCompatible = true;
 	LilvNodes * required = lilv_plugin_get_required_features( m_plugin );
 	LILV_FOREACH( nodes, node_iter, required )
 	{
 		node = const_cast<LilvNode *>( lilv_nodes_get( required, node_iter ) );
-		if( !lv2.featureIsSupported( lilv_node_as_uri( node ) ) )
+		if( !lv2()->featureIsSupported( lilv_node_as_uri( node ) ) )
 		{
-			m_compatible = false;
+			m_isCompatible = false;
 		}
 	}
 	lilv_nodes_free( required );
+
+	const LilvPluginClass * cls = lilv_plugin_get_class( m_plugin );
+	m_isInstrument = lilv_node_equals( lilv_plugin_class_get_uri( cls ), lv2()->node( lv2_InstrumentPlugin ) );
 
 	// Port ranges
 	float * mins = new float[numPorts()];
@@ -270,37 +292,37 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 		m_portIndex[i] = -1;
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2.node( lv2_InputPort ), lv2.node( pg_left ) ) );
+	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_InputPort ), lv2()->node( pg_left ) ) );
 	if( port )
 	{
 		m_portIndex[LeftIn] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2.node( lv2_InputPort ), lv2.node( pg_right ) ) );
+	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_InputPort ), lv2()->node( pg_right ) ) );
 	if( port )
 	{
 		m_portIndex[RightIn] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2.node( lv2_OutputPort ), lv2.node( pg_left ) ) );
+	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_OutputPort ), lv2()->node( pg_left ) ) );
 	if( port )
 	{
 		m_portIndex[LeftOut] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2.node( lv2_OutputPort ), lv2.node( pg_right ) ) );
+	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_OutputPort ), lv2()->node( pg_right ) ) );
 	if( port )
 	{
 		m_portIndex[RightOut] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2.node( lv2_InputPort ), lv2.node( lv2_control ) ) );
+	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_InputPort ), lv2()->node( lv2_control ) ) );
 	if( port )
 	{
 		m_portIndex[EventsIn] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2.node( lv2_OutputPort ), lv2.node( lv2_control ) ) );
+	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_OutputPort ), lv2()->node( lv2_control ) ) );
 	if( port )
 	{
 		m_portIndex[EventsOut] = lilv_port_get_index( m_plugin, port );
@@ -317,24 +339,24 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 		free( node );
 
 		// Flow
-		if( lilv_port_is_a( m_plugin, port, lv2.node( lv2_InputPort ) ) )
+		if( lilv_port_is_a( m_plugin, port, lv2()->node( lv2_InputPort ) ) )
 		{
 			portdesc->m_flow = FlowInput;
 		}
-		else if( lilv_port_is_a( m_plugin, port, lv2.node( lv2_OutputPort ) ) )
+		else if( lilv_port_is_a( m_plugin, port, lv2()->node( lv2_OutputPort ) ) )
 		{
 			portdesc->m_flow = FlowOutput;
 		}
 
 		// Type
-		if( lilv_port_is_a( m_plugin, port, lv2.node( lv2_ControlPort ) ) )
+		if( lilv_port_is_a( m_plugin, port, lv2()->node( lv2_ControlPort ) ) )
 		{
 			portdesc->m_type = TypeControl;
 			portdesc->m_minimum = mins[p];
 			portdesc->m_maximum = maxs[p];
 			portdesc->m_default = defs[p];
 		}
-		else if( lilv_port_is_a( m_plugin, port, lv2.node( lv2_AudioPort ) ) )
+		else if( lilv_port_is_a( m_plugin, port, lv2()->node( lv2_AudioPort ) ) )
 		{
 			portdesc->m_type = TypeAudio;
 			switch( portdesc->flow() )
@@ -360,14 +382,14 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 					}
 					break;
 				default:
-					m_compatible = false;
+					m_isCompatible = false;
 					break;
 			}
 		}
-		else if( lilv_port_is_a( m_plugin, port, lv2.node( atom_AtomPort ) ) || lilv_port_is_a( m_plugin, port, lv2.node( ev_EventPort ) ) )
+		else if( lilv_port_is_a( m_plugin, port, lv2()->node( atom_AtomPort ) ) || lilv_port_is_a( m_plugin, port, lv2()->node( ev_EventPort ) ) )
 		{
 			portdesc->m_type = TypeEvent;
-			portdesc->m_evbufType = lilv_port_is_a( m_plugin, port, lv2.node( atom_AtomPort ) ) ? LV2_EVBUF_ATOM : LV2_EVBUF_EVENT;
+			portdesc->m_evbufType = lilv_port_is_a( m_plugin, port, lv2()->node( atom_AtomPort ) ) ? LV2_EVBUF_ATOM : LV2_EVBUF_EVENT;
 
 			switch( portdesc->flow() )
 			{
@@ -384,27 +406,28 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 					}
 					break;
 				default:
-					m_compatible = false;
+					m_isCompatible = false;
 					break;
 			}
-		}
-
-		if( portIndex( LeftIn ) != -1 && portIndex( RightIn ) == -1 )
-		{
-			m_portIndex[RightIn] = portIndex( LeftIn );
-		}
-
-		if( portIndex( LeftOut ) != -1 && portIndex( RightOut ) == -1 )
-		{
-			m_portIndex[RightOut] = portIndex( LeftOut );
 		}
 
 		m_ports.push_back( portdesc );
 	}
 
-	if( !m_compatible )
+	if( portIndex( LeftIn ) != -1 && portIndex( RightIn ) == -1 )
 	{
-		fprintf( stderr, "incompatible: <%s>\n", uri() );
+		m_portIndex[RightIn] = portIndex( LeftIn );
+	}
+
+	if( portIndex( LeftOut ) != -1 && portIndex( RightOut ) == -1 )
+	{
+		m_portIndex[RightOut] = portIndex( LeftOut );
+	}
+
+	// Currently we can't do anything with a plugin that has no output
+	if( portIndex( LeftOut ) == -1 )
+	{
+		m_isCompatible = false;
 	}
 
 	delete[] mins;

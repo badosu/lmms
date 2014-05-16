@@ -29,11 +29,6 @@
 
 
 
-static Lv2Base * lv2 = findLv2();
-
-
-
-
 void * Lv2Port::buffer()
 {
 	switch( type() )
@@ -140,7 +135,7 @@ bool Lv2Plugin::instantiate( double rate )
 		}
 		m_ports.push_back( port );
 	}
-	m_instance = lilv_plugin_instantiate( m_descriptor->m_plugin, rate, lv2->s_features );
+	m_instance = lilv_plugin_instantiate( m_descriptor->m_plugin, rate, lv2()->s_features );
 	return !!m_instance;
 }
 
