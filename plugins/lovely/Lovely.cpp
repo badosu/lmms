@@ -1,3 +1,27 @@
+/*
+ * Lovely.cpp - LV2 instrument host for LMMS
+ *
+ * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
+ *
+ * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public
+ * License along with this program (see COPYING); if not, write to the
+ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA 02110-1301 USA.
+ *
+ */
+
 
 #include "lmmsconfig.h"
 
@@ -9,18 +33,20 @@
 #include "Lv2Plugin.h"
 
 #include "Lovely.h"
+#include "LovelySubPluginFeatures.h"
+
 #include "embed.cpp"
-
-
-
-
-static Lv2Base * lv2 = findLv2();
 
 
 
 
 extern "C"
 {
+
+
+static PluginPixmapLoader logo( "logo" );
+static LovelySubPluginFeatures subPluginFeatures( Plugin::Instrument );
+
 
 Plugin::Descriptor PLUGIN_EXPORT lovely_plugin_descriptor =
 {
@@ -30,9 +56,9 @@ Plugin::Descriptor PLUGIN_EXPORT lovely_plugin_descriptor =
 	"Hannu Haahti <grejppi/at/gmail/dot/com>",
 	0x0001,
 	Plugin::Instrument,
-	new PluginPixmapLoader( "logo" ),
+	&logo,
 	NULL,
-	NULL,
+	&subPluginFeatures
 };
 
 
@@ -158,7 +184,7 @@ void LovelyInstrument::loadPlugin( const char * uri )
 		delete m_plugin;
 	}
 
-	Lv2PluginDescriptor * descriptor = lv2->descriptor( uri );
+	Lv2PluginDescriptor * descriptor = lv2()->descriptor( uri );
 	if( !descriptor )
 	{
 		fprintf( stderr, "Can't find <%s>\n", uri );
@@ -166,6 +192,7 @@ void LovelyInstrument::loadPlugin( const char * uri )
 	else
 	{
 		m_plugin = new Lv2Plugin( descriptor, engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
+		m_plugin->run( engine::mixer()->framesPerPeriod() );
 	}
 	m_uri = uri;
 }
@@ -182,9 +209,11 @@ LovelyView::LovelyView( Instrument * instrument, QWidget * parent ) :
 	m_listWidget.setFixedHeight( 200 );
 	connect( &m_listWidget, SIGNAL( itemDoubleClicked(QListWidgetItem*) ), this, SLOT( loadFromList(QListWidgetItem*) ) );
 
-	for( uint32_t i = 0; i < lv2->numberOfPlugins(); ++i )
+	Plugin::Descriptor::SubPluginFeatures::KeyList kl;
+	m_instrument->descriptor()->subPluginFeatures->listSubPluginKeys( instrument->descriptor(), kl );
+	for( unsigned i = 0; i < kl.size(); ++i )
 	{
-		m_listWidget.addItem( QString( lv2->descriptor( i )->name() ) );
+		m_listWidget.addItem( kl[i].name );
 	}
 }
 
@@ -201,7 +230,10 @@ LovelyView::~LovelyView()
 void LovelyView::loadFromList( QListWidgetItem * item )
 {
 	m_instrument->m_pluginMutex.lock();
-	m_instrument->loadPlugin( lv2->descriptor( m_listWidget.currentRow() )->uri() );
+
+	Plugin::Descriptor::SubPluginFeatures::KeyList kl;
+	m_instrument->descriptor()->subPluginFeatures->listSubPluginKeys( m_instrument->descriptor(), kl );
+	m_instrument->loadPlugin( kl[m_listWidget.currentRow()].attributes["uri"].toUtf8().constData() );
 	m_instrument->m_pluginMutex.unlock();
 }
 
