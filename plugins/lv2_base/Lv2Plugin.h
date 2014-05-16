@@ -123,6 +123,5 @@ private:
 
 	fpp_t m_bufferSize;
 
-	LilvState * m_state;
 	const char * m_stateString;
 };
