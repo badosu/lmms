@@ -71,6 +71,8 @@ private:
 	LV2_Evbuf * m_evbuf;
 	float * m_buffer;
 
+	LilvState * m_state;
+
 	friend class Lv2Plugin;
 };
 
@@ -83,28 +85,15 @@ public:
 	Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t bufferSize );
 	~Lv2Plugin();
 
-	inline bool valid() { return !!m_instance; }
-
 	bool instantiate( double rate );
 	void createPorts();
 
 	const LilvPlugin * plugin() const { return m_descriptor->plugin(); }
 	LilvInstance * instance() const { return m_instance; }
 
-	inline void activate()
-	{
-		lilv_instance_activate( m_instance );
-	}
-
-	inline void deactivate()
-	{
-		lilv_instance_deactivate( m_instance );
-	}
-
-	inline void cleanup()
-	{
-		lilv_instance_free( m_instance );
-	}
+	inline void activate() { lilv_instance_activate( m_instance ); }
+	inline void deactivate() { lilv_instance_deactivate( m_instance ); }
+	inline void cleanup() { lilv_instance_free( m_instance ); }
 
 	inline bool writeEvent( const MidiEvent& event, const MidiTime& time )
 	{
@@ -121,10 +110,11 @@ public:
 	void resizeBuffers( fpp_t newSize );
 	void run( const fpp_t nframes );
 
-	float * buffer( PortDesignation designation )
-	{
-		return static_cast<float *>( m_ports[m_descriptor->portIndex( designation )].buffer() );
-	}
+	float * buffer( PortDesignation designation ) { return static_cast<float *>( m_ports[m_descriptor->portIndex( designation )].buffer() ); }
+
+	void loadState( const char * stateString );
+	void saveState();
+	const char * stateString() { return m_stateString; }
 
 private:
 	Lv2PluginDescriptor * m_descriptor;
@@ -132,4 +122,7 @@ private:
 	QVector<Lv2Port> m_ports;
 
 	fpp_t m_bufferSize;
+
+	LilvState * m_state;
+	const char * m_stateString;
 };

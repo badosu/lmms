@@ -114,7 +114,7 @@ bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & t
 	bool r = true;
 
 	m_pluginMutex.lock();
-	if( m_plugin && m_plugin->valid() )
+	if( m_plugin && m_plugin->instance() )
 	{
 		r = m_plugin->writeEvent( ev, time );
 	}
@@ -129,7 +129,7 @@ bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & t
 void LovelyInstrument::play( sampleFrame * buffer )
 {
 	m_pluginMutex.lock();
-	if( !m_plugin || !m_plugin->valid() )
+	if( !m_plugin || !m_plugin->instance() )
 	{
 		m_pluginMutex.unlock();
 		return;
@@ -159,6 +159,8 @@ void LovelyInstrument::play( sampleFrame * buffer )
 void LovelyInstrument::saveSettings( QDomDocument & doc, QDomElement & self )
 {
 	self.setAttribute( "uri", m_uri );
+	m_plugin->saveState();
+	self.setAttribute( "state", QString( m_plugin->stateString() ) );
 }
 
 
@@ -170,6 +172,11 @@ void LovelyInstrument::loadSettings( const QDomElement & self )
 
 	loadPlugin( self.attribute( "uri" ).toUtf8().constData() );
 	m_uri = self.attribute( "uri" );
+
+	if( self.hasAttribute( "state" ) )
+    {
+		m_plugin->loadState( self.attribute( "state" ).toUtf8().constData() );
+	}
 
 	m_pluginMutex.unlock();
 }

@@ -198,3 +198,86 @@ void Lv2Plugin::run( const fpp_t nframes )
 		m_ports[i].reset();
 	}
 }
+
+
+
+
+static void setPortValue( const char * symbol, void * data, const void * value, uint32_t size, uint32_t type )
+{
+	static const LV2_URID floatType = lv2()->mapUri( NULL, LV2_ATOM__Float );
+	static const LV2_URID doubleType = lv2()->mapUri( NULL, LV2_ATOM__Double );
+	static const LV2_URID intType = lv2()->mapUri( NULL, LV2_ATOM__Int );
+	static const LV2_URID longType = lv2()->mapUri( NULL, LV2_ATOM__Long );
+
+	Lv2Plugin * self = static_cast<Lv2Plugin *>( data );
+	Lv2Port * port = self->port( symbol );
+	if( !port )
+	{
+		fprintf( stderr, "error: Preset port `%s' is missing\n", symbol );
+		return;
+	}
+
+	float fvalue;
+	if( type == floatType )
+	{
+		fvalue = *static_cast<const float *>( value );
+	}
+	else if( type == doubleType )
+	{
+		fvalue = *static_cast<const double *>( value );
+	}
+	else if( type == intType )
+	{
+		fvalue = *static_cast<const int32_t*>( value );
+	}
+	else if( type == longType )
+	{
+		fvalue = *static_cast<const int64_t*>( value );
+	}
+	else
+	{
+		fprintf( stderr, "error: Preset `%s' value has bad type\n", symbol );
+		return;
+	}
+
+	port->setValue( fvalue );
+}
+
+
+
+
+void Lv2Plugin::loadState( const char * stateString )
+{
+	m_state = lilv_state_new_from_string( lv2()->world(), &lv2()->urid__map, stateString );
+	lilv_state_restore( m_state, m_instance, setPortValue, this, 0, NULL );
+}
+
+
+
+
+static const void * getPortValue( const char * symbol, void * data, uint32_t * size, uint32_t * type )
+{
+	static const LV2_URID floatType = lv2()->mapUri( NULL, LV2_ATOM__Float );
+
+	Lv2Plugin * self = static_cast<Lv2Plugin *>( data );
+	Lv2Port * port = self->port( symbol );
+
+	if( port && port->flow() == FlowInput && port->type() == TypeControl )
+	{
+		*size = sizeof( float );
+		*type = floatType;
+		return port->buffer();
+	}
+	*size = 0;
+	*type = 0;
+	return NULL;
+}
+
+
+
+
+void Lv2Plugin::saveState()
+{
+	m_state = lilv_state_new_from_instance( plugin(), instance(), &lv2()->urid__map, NULL, NULL, NULL, NULL, getPortValue, this, LV2_STATE_IS_POD | LV2_STATE_IS_PORTABLE, NULL );
+	m_stateString = lilv_state_to_string( lv2()->world(), &lv2()->urid__map, &lv2()->urid__unmap, m_state, "urn:lmms:state", NULL );
+}
