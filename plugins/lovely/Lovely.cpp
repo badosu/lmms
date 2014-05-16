@@ -194,7 +194,7 @@ void LovelyInstrument::loadPlugin( const char * uri )
 		m_plugin = new Lv2Plugin( descriptor, engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
 		m_plugin->run( engine::mixer()->framesPerPeriod() );
 	}
-	m_uri = uri;
+	m_uri = QString( uri );
 }
 
 

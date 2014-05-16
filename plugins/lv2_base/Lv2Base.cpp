@@ -59,27 +59,27 @@ LilvWorld * Lv2Base::s_world;
 LilvPlugins * Lv2Base::s_plugins;
 
 
-static LV2_URID_Map urid__map = { NULL, NULL };
-static LV2_URID_Unmap urid__unmap = { NULL, NULL };
+LV2_URID_Map Lv2Base::urid__map = { NULL, NULL };
+LV2_URID_Unmap Lv2Base::urid__unmap = { NULL, NULL };
 
-static LV2_Feature mapFeature = { LV2_URID__map, &urid__map };
-static LV2_Feature unmapFeature = { LV2_URID__unmap, &urid__unmap };
+LV2_Feature Lv2Base::mapFeature = { LV2_URID__map, &Lv2Base::urid__map };
+LV2_Feature Lv2Base::unmapFeature = { LV2_URID__unmap, &Lv2Base::urid__unmap };
 
-//~ static LV2_Options_Option options[5];
-//~ static LV2_Feature optionsFeature = { LV2_OPTIONS__options, NULL };
+//~ static LV2_Options_Option Lv2Base::options[5];
+//~ static LV2_Feature Lv2Base::optionsFeature = { LV2_OPTIONS__options, NULL };
 
-//~ static LV2_Feature bufSizeFeatures[3] = {
+//~ static LV2_Feature Lv2Base::bufSizeFeatures[3] = {
 	//~ { LV2_BUF_SIZE__powerOf2BlockLength, NULL },
 	//~ { LV2_BUF_SIZE__fixedBlockLength, NULL },
 	//~ { LV2_BUF_SIZE__boundedBlockLength, NULL }
 //~ };
 
 const LV2_Feature* Lv2Base::s_features[] = {
-	&mapFeature, &unmapFeature,
-	//~ &optionsFeature,
-	//~ &bufSizeFeatures[0],
-	//~ &bufSizeFeatures[1],
-	//~ &bufSizeFeatures[2],
+	&Lv2Base::mapFeature, &Lv2Base::unmapFeature,
+	//~ &Lv2Base::optionsFeature,
+	//~ &Lv2Base::bufSizeFeatures[0],
+	//~ &Lv2Base::bufSizeFeatures[1],
+	//~ &Lv2Base::bufSizeFeatures[2],
 	NULL
 };
 
@@ -241,7 +241,7 @@ static Lv2Base lv2Base;
 // and a single way to get it
 Lv2Base * lv2()
 {
-	if( !lv2Base.works() )
+	if( !lv2Base.world() )
 	{
 		lv2Base.init();
 	}
