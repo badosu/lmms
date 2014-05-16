@@ -248,8 +248,9 @@ static void setPortValue( const char * symbol, void * data, const void * value, 
 
 void Lv2Plugin::loadState( const char * stateString )
 {
-	m_state = lilv_state_new_from_string( lv2()->world(), &lv2()->urid__map, stateString );
-	lilv_state_restore( m_state, m_instance, setPortValue, this, 0, NULL );
+	LilvState * state = lilv_state_new_from_string( lv2()->world(), &lv2()->urid__map, stateString );
+	lilv_state_restore( state, m_instance, setPortValue, this, 0, NULL );
+	lilv_state_free( state );
 }
 
 
@@ -278,6 +279,7 @@ static const void * getPortValue( const char * symbol, void * data, uint32_t * s
 
 void Lv2Plugin::saveState()
 {
-	m_state = lilv_state_new_from_instance( plugin(), instance(), &lv2()->urid__map, NULL, NULL, NULL, NULL, getPortValue, this, LV2_STATE_IS_POD | LV2_STATE_IS_PORTABLE, NULL );
-	m_stateString = lilv_state_to_string( lv2()->world(), &lv2()->urid__map, &lv2()->urid__unmap, m_state, "urn:lmms:state", NULL );
+	LilvState * state = lilv_state_new_from_instance( plugin(), instance(), &lv2()->urid__map, NULL, NULL, NULL, NULL, getPortValue, this, LV2_STATE_IS_POD | LV2_STATE_IS_PORTABLE, NULL );
+	m_stateString = lilv_state_to_string( lv2()->world(), &lv2()->urid__map, &lv2()->urid__unmap, state, "urn:lmms:state", NULL );
+	lilv_state_free( state );
 }
