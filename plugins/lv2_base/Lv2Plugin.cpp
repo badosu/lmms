@@ -24,6 +24,10 @@
 
 
 #include "lmmsconfig.h"
+
+#include "engine.h"
+#include "Mixer.h"
+
 #include "Lv2Plugin.h"
 
 
@@ -78,6 +82,9 @@ Lv2Plugin::Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t buffe
 	m_descriptor( descriptor ),
 	m_bufferSize( bufferSize )
 {
+	lv2()->setRate( rate );
+	lv2()->setBufferSize( engine::mixer()->framesPerPeriod() );
+	
 	if( !instantiate( rate ) )
 	{
 		fprintf( stderr, "Could not instantiate <%s>\n", m_descriptor->uri() );
@@ -127,7 +134,7 @@ bool Lv2Plugin::instantiate( double rate )
 				port.m_buffer = static_cast<float *>( calloc( m_bufferSize, sizeof( float ) ) );
 				break;
 			case TypeEvent:
-				port.m_evbuf = lv2_evbuf_new( 1024, portdesc->evbufType(), atom_Chunk, atom_Sequence );
+				port.m_evbuf = lv2_evbuf_new( lv2()->s_sequenceSize, portdesc->evbufType(), atom_Chunk, atom_Sequence );
 				port.reset();
 				break;
 			default:
@@ -173,6 +180,7 @@ void Lv2Plugin::resizeBuffers( fpp_t newSize )
 			memset( m_ports[p].m_buffer, 0, sizeof( float ) * newSize );
 		}
 	}
+	lv2()->setBufferSize( newSize );
 }
 
 
@@ -185,6 +193,7 @@ void Lv2Plugin::run( const fpp_t nframes )
 		return;
 	}
 
+	lv2()->setRate( engine::mixer()->framesPerPeriod() );
 	resizeBuffers( nframes );
 	for( int i = 0; i < m_ports.size(); ++i )
 	{
@@ -204,10 +213,9 @@ void Lv2Plugin::run( const fpp_t nframes )
 
 static void setPortValue( const char * symbol, void * data, const void * value, uint32_t size, uint32_t type )
 {
-	static const LV2_URID floatType = lv2()->mapUri( NULL, LV2_ATOM__Float );
-	static const LV2_URID doubleType = lv2()->mapUri( NULL, LV2_ATOM__Double );
-	static const LV2_URID intType = lv2()->mapUri( NULL, LV2_ATOM__Int );
-	static const LV2_URID longType = lv2()->mapUri( NULL, LV2_ATOM__Long );
+	static const LV2_URID atom_Double = lv2()->mapUri( NULL, LV2_ATOM__Double );
+	static const LV2_URID atom_Int = lv2()->mapUri( NULL, LV2_ATOM__Int );
+	static const LV2_URID atom_Long = lv2()->mapUri( NULL, LV2_ATOM__Long );
 
 	Lv2Plugin * self = static_cast<Lv2Plugin *>( data );
 	Lv2Port * port = self->port( symbol );
@@ -218,19 +226,19 @@ static void setPortValue( const char * symbol, void * data, const void * value, 
 	}
 
 	float fvalue;
-	if( type == floatType )
+	if( type == atom_Float )
 	{
 		fvalue = *static_cast<const float *>( value );
 	}
-	else if( type == doubleType )
+	else if( type == atom_Double )
 	{
 		fvalue = *static_cast<const double *>( value );
 	}
-	else if( type == intType )
+	else if( type == atom_Int )
 	{
 		fvalue = *static_cast<const int32_t*>( value );
 	}
-	else if( type == longType )
+	else if( type == atom_Long )
 	{
 		fvalue = *static_cast<const int64_t*>( value );
 	}
@@ -258,15 +266,13 @@ void Lv2Plugin::loadState( const char * stateString )
 
 static const void * getPortValue( const char * symbol, void * data, uint32_t * size, uint32_t * type )
 {
-	static const LV2_URID floatType = lv2()->mapUri( NULL, LV2_ATOM__Float );
-
 	Lv2Plugin * self = static_cast<Lv2Plugin *>( data );
 	Lv2Port * port = self->port( symbol );
 
 	if( port && port->flow() == FlowInput && port->type() == TypeControl )
 	{
 		*size = sizeof( float );
-		*type = floatType;
+		*type = atom_Float;
 		return port->buffer();
 	}
 	*size = 0;

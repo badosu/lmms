@@ -51,12 +51,16 @@ Plugin::Descriptor PLUGIN_EXPORT lv2base_plugin_descriptor =
 // ------------------------------------------------------------------------
 
 
-QVector<const char *> Lv2Base::s_uriMap;
+QVector<QString> Lv2Base::s_uriMap;
 QVector<LilvNode *> Lv2Base::s_nodeMap;
 QVector<Lv2PluginDescriptor *> Lv2Base::s_descriptors;
 
 LilvWorld * Lv2Base::s_world;
 LilvPlugins * Lv2Base::s_plugins;
+
+const int32_t Lv2Base::s_sequenceSize = 1024;
+float Lv2Base::s_rate;
+int32_t Lv2Base::s_nframes;
 
 
 LV2_URID_Map Lv2Base::urid__map = { NULL, NULL };
@@ -65,21 +69,43 @@ LV2_URID_Unmap Lv2Base::urid__unmap = { NULL, NULL };
 LV2_Feature Lv2Base::mapFeature = { LV2_URID__map, &Lv2Base::urid__map };
 LV2_Feature Lv2Base::unmapFeature = { LV2_URID__unmap, &Lv2Base::urid__unmap };
 
-//~ static LV2_Options_Option Lv2Base::options[5];
-//~ static LV2_Feature Lv2Base::optionsFeature = { LV2_OPTIONS__options, NULL };
+LV2_Options_Option Lv2Base::options[5] =
+{
+	{
+		LV2_OPTIONS_INSTANCE, 0, param_sampleRate,
+		sizeof( float ), atom_Float, &Lv2Base::s_rate
+	},
+	{
+		LV2_OPTIONS_INSTANCE, 0, bufsz_minBlockLength,
+		sizeof( int32_t ), atom_Int, &Lv2Base::s_nframes
+	},
+	{
+		LV2_OPTIONS_INSTANCE, 0, bufsz_maxBlockLength,
+		sizeof( int32_t ), atom_Int, &Lv2Base::s_nframes
+	},
+	{
+		LV2_OPTIONS_INSTANCE, 0, bufsz_sequenceSize,
+		sizeof( int32_t ), atom_Int, &Lv2Base::s_sequenceSize
+	},
+	{ LV2_OPTIONS_INSTANCE, 0, 0, 0, 0, NULL }
+};
 
-//~ static LV2_Feature Lv2Base::bufSizeFeatures[3] = {
-	//~ { LV2_BUF_SIZE__powerOf2BlockLength, NULL },
-	//~ { LV2_BUF_SIZE__fixedBlockLength, NULL },
-	//~ { LV2_BUF_SIZE__boundedBlockLength, NULL }
-//~ };
+LV2_Feature Lv2Base::optionsFeature = { LV2_OPTIONS__options, &Lv2Base::options };
 
-const LV2_Feature* Lv2Base::s_features[] = {
+LV2_Feature Lv2Base::bufSizeFeatures[3] =
+{
+	{ LV2_BUF_SIZE__powerOf2BlockLength, NULL },
+	{ LV2_BUF_SIZE__fixedBlockLength, NULL },
+	{ LV2_BUF_SIZE__boundedBlockLength, NULL }
+};
+
+const LV2_Feature* Lv2Base::s_features[] =
+{
 	&Lv2Base::mapFeature, &Lv2Base::unmapFeature,
-	//~ &Lv2Base::optionsFeature,
-	//~ &Lv2Base::bufSizeFeatures[0],
-	//~ &Lv2Base::bufSizeFeatures[1],
-	//~ &Lv2Base::bufSizeFeatures[2],
+	&Lv2Base::optionsFeature,
+	&Lv2Base::bufSizeFeatures[0],
+	&Lv2Base::bufSizeFeatures[1],
+	&Lv2Base::bufSizeFeatures[2],
 	NULL
 };
 
@@ -147,7 +173,7 @@ void Lv2Base::init()
 
 	for( int i = 0; i < s_uriMap.size(); ++i )
 	{
-		LilvNode * node = lilv_new_uri( s_world, s_uriMap[i] );
+		LilvNode * node = lilv_new_uri( s_world, s_uriMap[i].toUtf8().constData() );
 		s_nodeMap.push_back( node );
 	}
 
@@ -173,12 +199,14 @@ LV2_URID Lv2Base::mapUri( LV2_URID_Map_Handle handle, const char * uri )
 {
 	for( int i = 0; i < s_uriMap.size(); ++i )
 	{
-		if( !strcmp( uri, s_uriMap[i] ) )
+		if( !strcmp( uri, s_uriMap[i].toUtf8().constData() ) )
 		{
 			return i + 1;
 		}
 	}
-	s_uriMap.push_back( uri );
+
+	QString qs( uri );
+	s_uriMap.push_back( qs );
 	return s_uriMap.size();
 }
 
@@ -191,7 +219,7 @@ const char* Lv2Base::unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid )
 	{
 		return NULL;
 	}
-	return s_uriMap[urid - 1];
+	return s_uriMap[urid - 1].toUtf8().constData();
 }
 
 
