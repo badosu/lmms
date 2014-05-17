@@ -41,6 +41,7 @@
 #include <lv2/lv2plug.in/ns/lv2core/lv2.h>
 
 #include <QVector>
+#include <QString>
 
 #include "lv2_evbuf.h"
 
@@ -198,10 +199,10 @@ public:
 	static LV2_Feature mapFeature;
 	static LV2_Feature unmapFeature;
 
-	//~ static LV2_Options_Option options[5];
-	//~ static LV2_Feature optionsFeature;
+	static LV2_Options_Option options[5];
+	static LV2_Feature optionsFeature;
 
-	//~ static LV2_Feature bufSizeFeatures[3];
+	static LV2_Feature bufSizeFeatures[3];
 
 	static const LV2_Feature* s_features[];
 
@@ -212,13 +213,21 @@ public:
 	static LV2_URID mapUri( LV2_URID_Map_Handle handle, const char * uri );
 	static const char* unmapUri( LV2_URID_Unmap_Handle handle, LV2_URID urid );
 
+	static const int32_t s_sequenceSize;
+
+	static void setRate( float rate ) { s_rate = rate; }
+	static void setBufferSize( int32_t nframes ) { s_nframes = nframes; }
+
 private:
-	static QVector<const char *> s_uriMap;
+	static QVector<QString> s_uriMap;
 	static QVector<LilvNode *> s_nodeMap;
 	static QVector<Lv2PluginDescriptor *> s_descriptors;
 
 	static LilvWorld * s_world;
 	static LilvPlugins * s_plugins;
+
+	static float s_rate;
+	static int32_t s_nframes;
 };
 
 
