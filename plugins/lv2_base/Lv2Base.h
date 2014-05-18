@@ -65,8 +65,10 @@ enum URIs
 {
 	atom_AtomPort = 1,
 	atom_Chunk,
+	atom_Double,
 	atom_Float,
 	atom_Int,
+	atom_Long,
 	atom_Sequence,
 	bufsz_maxBlockLength,
 	bufsz_minBlockLength,
