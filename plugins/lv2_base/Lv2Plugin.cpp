@@ -213,10 +213,6 @@ void Lv2Plugin::run( const fpp_t nframes )
 
 static void setPortValue( const char * symbol, void * data, const void * value, uint32_t size, uint32_t type )
 {
-	static const LV2_URID atom_Double = lv2()->mapUri( NULL, LV2_ATOM__Double );
-	static const LV2_URID atom_Int = lv2()->mapUri( NULL, LV2_ATOM__Int );
-	static const LV2_URID atom_Long = lv2()->mapUri( NULL, LV2_ATOM__Long );
-
 	Lv2Plugin * self = static_cast<Lv2Plugin *>( data );
 	Lv2Port * port = self->port( symbol );
 	if( !port )

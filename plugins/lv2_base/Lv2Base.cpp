@@ -146,8 +146,10 @@ void Lv2Base::init()
 
 	s_uriMap.push_back( LV2_ATOM__AtomPort );
 	s_uriMap.push_back( LV2_ATOM__Chunk );
+	s_uriMap.push_back( LV2_ATOM__Double );
 	s_uriMap.push_back( LV2_ATOM__Float );
 	s_uriMap.push_back( LV2_ATOM__Int );
+	s_uriMap.push_back( LV2_ATOM__Long );
 	s_uriMap.push_back( LV2_ATOM__Sequence );
 	s_uriMap.push_back( LV2_BUF_SIZE__maxBlockLength );
 	s_uriMap.push_back( LV2_BUF_SIZE__minBlockLength );
