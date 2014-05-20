@@ -202,6 +202,11 @@ void LovelyInstrument::loadPlugin( const char * uri )
 		m_plugin->run( engine::mixer()->framesPerPeriod() );
 	}
 	m_uri = QString( uri );
+
+	if( m_view )
+	{
+		m_view->findPresets();
+	}
 }
 
 
@@ -209,19 +214,27 @@ void LovelyInstrument::loadPlugin( const char * uri )
 
 LovelyView::LovelyView( Instrument * instrument, QWidget * parent ) :
 	InstrumentView( instrument, parent ),
-	m_listWidget( this )
+	m_instrument( static_cast<LovelyInstrument *>( instrument ) ),
+	m_presetModel( m_instrument, "Preset" ),
+	m_presetList( this, "Preset" ),
+	m_pluginList( this )
 {
-	m_instrument = static_cast<LovelyInstrument *>( instrument );
-	//~ m_listWidget.setFixedWidth( 200 );
-	m_listWidget.setFixedHeight( 200 );
-	connect( &m_listWidget, SIGNAL( itemDoubleClicked(QListWidgetItem*) ), this, SLOT( loadFromList(QListWidgetItem*) ) );
+	m_pluginList.setFixedHeight( 200 );
+	connect( &m_pluginList, SIGNAL( itemDoubleClicked(QListWidgetItem*) ), this, SLOT( loadFromList(QListWidgetItem*) ) );
 
 	Plugin::Descriptor::SubPluginFeatures::KeyList kl;
 	m_instrument->descriptor()->subPluginFeatures->listSubPluginKeys( instrument->descriptor(), kl );
 	for( unsigned i = 0; i < kl.size(); ++i )
 	{
-		m_listWidget.addItem( kl[i].name );
+		m_pluginList.addItem( kl[i].name );
 	}
+	m_instrument->m_view = this;
+
+	connect( &m_presetModel, SIGNAL( dataChanged() ), this, SLOT( loadPreset() ) );
+	m_presetList.setModel( &m_presetModel );
+	m_presetList.move( 80, 216 );
+	m_presetList.setFixedWidth( 80 );
+	findPresets();
 }
 
 
@@ -229,6 +242,28 @@ LovelyView::LovelyView( Instrument * instrument, QWidget * parent ) :
 
 LovelyView::~LovelyView()
 {
+	m_instrument->m_view = NULL;
+}
+
+
+
+
+void LovelyView::findPresets()
+{
+	m_presetModel.clear();
+	m_presetModel.addItem( "None", NULL );
+
+	if( !m_instrument->m_plugin )
+	{
+		return;
+	}
+
+	m_instrument->m_plugin->descriptor()->findPresets();
+
+	for( int i = 0; i < m_instrument->m_plugin->descriptor()->numPresets(); ++i )
+	{
+		m_presetModel.addItem( m_instrument->m_plugin->descriptor()->preset( i )->name(), NULL );
+	}
 }
 
 
@@ -240,7 +275,23 @@ void LovelyView::loadFromList( QListWidgetItem * item )
 
 	Plugin::Descriptor::SubPluginFeatures::KeyList kl;
 	m_instrument->descriptor()->subPluginFeatures->listSubPluginKeys( m_instrument->descriptor(), kl );
-	m_instrument->loadPlugin( kl[m_listWidget.currentRow()].attributes["uri"].toUtf8().constData() );
+	m_instrument->loadPlugin( kl[m_pluginList.currentRow()].attributes["uri"].toUtf8().constData() );
+
+	m_instrument->m_pluginMutex.unlock();
+}
+
+
+
+
+void LovelyView::loadPreset()
+{
+	if( !m_presetModel.value() )
+	{
+		return;
+	}
+
+	m_instrument->m_pluginMutex.lock();
+	m_instrument->m_plugin->loadPreset( m_presetModel.value() - 1 );
 	m_instrument->m_pluginMutex.unlock();
 }
 

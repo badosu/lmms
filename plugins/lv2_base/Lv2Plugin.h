@@ -23,19 +23,6 @@
  */
 
 
-#include <lilv/lilv.h>
-
-#include <lv2/lv2plug.in/ns/ext/atom/atom.h>
-#include <lv2/lv2plug.in/ns/ext/buf-size/buf-size.h>
-#include <lv2/lv2plug.in/ns/ext/atom/util.h>
-#include <lv2/lv2plug.in/ns/ext/event/event.h>
-#include <lv2/lv2plug.in/ns/ext/midi/midi.h>
-#include <lv2/lv2plug.in/ns/ext/options/options.h>
-#include <lv2/lv2plug.in/ns/ext/parameters/parameters.h>
-#include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
-#include <lv2/lv2plug.in/ns/ext/urid/urid.h>
-#include <lv2/lv2plug.in/ns/lv2core/lv2.h>
-
 #include <QVector>
 #include <QtGlobal>
 
@@ -90,6 +77,7 @@ public:
 
 	const LilvPlugin * plugin() const { return m_descriptor->plugin(); }
 	LilvInstance * instance() const { return m_instance; }
+	Lv2PluginDescriptor * descriptor() const { return m_descriptor; }
 
 	inline void activate() { lilv_instance_activate( m_instance ); }
 	inline void deactivate() { lilv_instance_deactivate( m_instance ); }
@@ -115,6 +103,8 @@ public:
 	void loadState( const char * stateString );
 	void saveState();
 	const char * stateString() { return m_stateString; }
+
+	void loadPreset( int index );
 
 private:
 	Lv2PluginDescriptor * m_descriptor;

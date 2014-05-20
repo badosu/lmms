@@ -36,6 +36,7 @@
 #include <lv2/lv2plug.in/ns/ext/options/options.h>
 #include <lv2/lv2plug.in/ns/ext/parameters/parameters.h>
 #include <lv2/lv2plug.in/ns/ext/port-groups/port-groups.h>
+#include <lv2/lv2plug.in/ns/ext/presets/presets.h>
 #include <lv2/lv2plug.in/ns/ext/state/state.h>
 #include <lv2/lv2plug.in/ns/ext/urid/urid.h>
 #include <lv2/lv2plug.in/ns/lv2core/lv2.h>
@@ -85,6 +86,7 @@ enum URIs
 	param_sampleRate,
 	pg_left,
 	pg_right,
+	pset_Preset,
 	rdfs_label,
 	urid_map,
 	urid_unmap
@@ -141,6 +143,23 @@ private:
 
 
 
+class EXPORT Lv2Preset
+{
+public:
+	Lv2Preset( const LilvNode * node, const char * name ) : m_node( node ), m_name( name ) {}
+	~Lv2Preset() {}
+
+	const LilvNode * node() { return m_node; }
+	const char * name() { return m_name; }
+
+private:
+	const LilvNode * m_node;
+	const char * m_name;
+};
+
+
+
+
 class PLUGIN_EXPORT Lv2PluginDescriptor
 {
 public:
@@ -165,11 +184,20 @@ public:
 		return name;
 	}
 
+	int numPresets() const { return m_presets.size(); };
+	Lv2Preset * preset( int index ) { return m_presets[index]; }
+	void findPresets();
+
 private:
-	QVector<Lv2PortDescriptor *> m_ports;
 	const LilvPlugin * m_plugin;
+	
+
+	QVector<Lv2PortDescriptor *> m_ports;
 	uint32_t m_numPorts;
 	int32_t m_portIndex[NumPortDesignations];
+
+	QVector<Lv2Preset *> m_presets;
+
 	bool m_isCompatible;
 	bool m_isInstrument;
 
