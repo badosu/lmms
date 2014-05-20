@@ -285,3 +285,17 @@ void Lv2Plugin::saveState()
 	m_stateString = lilv_state_to_string( lv2()->world(), &lv2()->urid__map, &lv2()->urid__unmap, state, "urn:lmms:state", NULL );
 	lilv_state_free( state );
 }
+
+
+
+
+void Lv2Plugin::loadPreset( int index )
+{
+	const LilvNode * preset = descriptor()->preset( index )->node();
+	LilvState * state = lilv_state_new_from_world( lv2()->world(), &lv2()->urid__map, preset );
+	if( state )
+	{
+		lilv_state_restore( state, m_instance, setPortValue, this, 0, NULL );
+	}
+	lilv_state_free( state );
+}

@@ -29,9 +29,16 @@
 #include <QtCore/QMutex>
 
 #include <QListWidget>
+#include "combobox.h"
 
 #include "Instrument.h"
 #include "InstrumentView.h"
+
+
+
+
+class LovelyInstrument;
+class LovelyView;
 
 
 
@@ -65,6 +72,9 @@ private:
 
 	QString m_uri;
 
+	// this is a hack
+	LovelyView * m_view;
+
 	friend class LovelyView;
 };
 
@@ -78,13 +88,19 @@ public:
 	LovelyView( Instrument * instrument, QWidget * parent );
 	virtual ~LovelyView();
 
+	void findPresets();
+
 public slots:
 	void loadFromList( QListWidgetItem * item );
+	void loadPreset();
 
 private:
 	LovelyInstrument * m_instrument;
 
-	QListWidget m_listWidget;
+	ComboBoxModel m_presetModel;
+	comboBox m_presetList;
+
+	QListWidget m_pluginList;
 };
 
 #endif

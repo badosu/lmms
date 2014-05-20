@@ -166,6 +166,7 @@ void Lv2Base::init()
 	s_uriMap.push_back( LV2_PARAMETERS__sampleRate );
 	s_uriMap.push_back( LV2_PORT_GROUPS__left );
 	s_uriMap.push_back( LV2_PORT_GROUPS__right );
+	s_uriMap.push_back( LV2_PRESETS__Preset );
 	s_uriMap.push_back( LILV_NS_RDFS "label" );
 	s_uriMap.push_back( LV2_URID__map );
 	s_uriMap.push_back( LV2_URID__unmap );
@@ -454,7 +455,7 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 		m_portIndex[RightOut] = portIndex( LeftOut );
 	}
 
-	// Currently we can't do anything with a plugin that has no output
+	// Currently we can't do anything with a plugin that outputs no sound
 	if( portIndex( LeftOut ) == -1 )
 	{
 		m_isCompatible = false;
@@ -475,5 +476,40 @@ Lv2PluginDescriptor::~Lv2PluginDescriptor()
 		delete m_ports[i];
 	}
 	m_ports.clear();
+
+	for( int i = 0; i < m_presets.size(); ++i )
+	{
+		delete m_presets[i];
+	}
+	m_presets.clear();
 }
 
+
+
+
+void Lv2PluginDescriptor::findPresets()
+{
+	if( m_presets.size() )
+	{
+		return;
+	}
+
+	LilvNodes * presets = lilv_plugin_get_related( m_plugin, lv2()->node( pset_Preset ) );
+
+	LILV_FOREACH( nodes, i, presets )
+	{
+		const LilvNode * preset = lilv_nodes_get( presets, i );
+		lilv_world_load_resource( lv2()->world(), preset );
+
+		LilvNodes * labels = lilv_world_find_nodes( lv2()->world(), preset, lv2()->node( rdfs_label ), NULL );
+		if( labels )
+		{
+			const LilvNode * label = lilv_nodes_get_first( labels );
+			Lv2Preset * pset = new Lv2Preset( preset, lilv_node_as_string( label ) );
+			m_presets.push_back( pset );
+			lilv_nodes_free( labels );
+		}
+	}
+
+	//~ lilv_nodes_free( presets );
+}
