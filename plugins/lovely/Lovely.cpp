@@ -26,6 +26,7 @@
 #include "lmmsconfig.h"
 
 #include "engine.h"
+#include "song.h"
 #include "InstrumentTrack.h"
 #include "InstrumentPlayHandle.h"
 #include "text_float.h"
@@ -80,7 +81,8 @@ Plugin * PLUGIN_EXPORT lmms_plugin_main( Model *, void * data )
 LovelyInstrument::LovelyInstrument( InstrumentTrack * track ) :
 	Instrument( track, &lovely_plugin_descriptor ),
 	m_plugin( NULL ),
-	m_pluginMutex()
+	m_pluginMutex(),
+	m_view( NULL )
 {
 	InstrumentPlayHandle * handle = new InstrumentPlayHandle( this );
 	engine::mixer()->addPlayHandle( handle );
@@ -91,11 +93,12 @@ LovelyInstrument::LovelyInstrument( InstrumentTrack * track ) :
 
 LovelyInstrument::~LovelyInstrument()
 {
-	engine::mixer()->removePlayHandles( instrumentTrack() );
 	if( m_plugin )
 	{
 		delete m_plugin;
+		m_plugin = NULL;
 	}
+	engine::mixer()->removePlayHandles( instrumentTrack() );
 }
 
 
@@ -109,7 +112,7 @@ PluginView * LovelyInstrument::instantiateView( QWidget * parent )
 
 
 
-bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & time )
+/* bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & time )
 {
 	bool r = true;
 
@@ -121,7 +124,7 @@ bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & t
 	m_pluginMutex.unlock();
 
 	return r;
-}
+} */
 
 
 
@@ -150,6 +153,48 @@ void LovelyInstrument::play( sampleFrame * buffer )
 	}
 
 	instrumentTrack()->processAudioBuffer( buffer, nframes, NULL );
+	m_pluginMutex.unlock();
+}
+
+
+
+
+void LovelyInstrument::playNote( NotePlayHandle * n, sampleFrame * )
+{
+	m_pluginMutex.lock();
+	if( n->totalFramesPlayed() )
+	{
+		m_pluginMutex.unlock();
+		return;
+	}
+
+	int * key = new int( engine::getSong()->masterPitch() + n->midiKey() );
+	n->m_pluginData = static_cast<void *>( key );
+
+	if( m_plugin && m_plugin->instance() )
+	{
+		MidiEvent ev( MidiNoteOn );
+		ev.setKey( *key );
+		ev.setVelocity( n->volumeLevel( 0 ) * instrumentTrack()->midiPort()->baseVelocity() );
+		m_plugin->writeEvent( ev, n->offset() );
+	}
+	m_pluginMutex.unlock();
+}
+
+
+
+
+void LovelyInstrument::deleteNotePluginData( NotePlayHandle * n )
+{
+	m_pluginMutex.lock();
+	int * key = static_cast<int *>( n->m_pluginData );
+	if( m_plugin && m_plugin->instance() )
+	{
+		MidiEvent ev( MidiNoteOff );
+		ev.setKey( *key );
+		m_plugin->writeEvent( ev, 0 );
+	}
+	delete key;
 	m_pluginMutex.unlock();
 }
 
@@ -189,6 +234,7 @@ void LovelyInstrument::loadPlugin( const char * uri )
 	if( m_plugin )
 	{
 		delete m_plugin;
+		m_plugin = NULL;
 	}
 
 	Lv2PluginDescriptor * descriptor = lv2()->descriptor( uri );
@@ -215,7 +261,7 @@ void LovelyInstrument::loadPlugin( const char * uri )
 LovelyView::LovelyView( Instrument * instrument, QWidget * parent ) :
 	InstrumentView( instrument, parent ),
 	m_instrument( static_cast<LovelyInstrument *>( instrument ) ),
-	m_presetModel( m_instrument, "Preset" ),
+	m_presetModel( NULL, "Preset" ),
 	m_presetList( this, "Preset" ),
 	m_pluginList( this )
 {
@@ -232,8 +278,8 @@ LovelyView::LovelyView( Instrument * instrument, QWidget * parent ) :
 
 	connect( &m_presetModel, SIGNAL( dataChanged() ), this, SLOT( loadPreset() ) );
 	m_presetList.setModel( &m_presetModel );
-	m_presetList.move( 80, 216 );
-	m_presetList.setFixedWidth( 80 );
+	m_presetList.move( 16, 216 );
+	m_presetList.setFixedWidth( 224 );
 	findPresets();
 }
 
@@ -257,8 +303,6 @@ void LovelyView::findPresets()
 	{
 		return;
 	}
-
-	m_instrument->m_plugin->descriptor()->findPresets();
 
 	for( int i = 0; i < m_instrument->m_plugin->descriptor()->numPresets(); ++i )
 	{

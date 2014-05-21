@@ -58,8 +58,10 @@ public:
 
 	virtual Flags flags() const { return IsSingleStreamed | IsMidiBased; }
 
-	virtual bool handleMidiEvent( const MidiEvent & event, const MidiTime & time );
+	//~ virtual bool handleMidiEvent( const MidiEvent & event, const MidiTime & time );
 	virtual void play( sampleFrame * buffer );
+	virtual void playNote( NotePlayHandle * n, sampleFrame * );
+	virtual void deleteNotePluginData( NotePlayHandle * n );
 
 	void saveSettings( QDomDocument & doc, QDomElement & self );
 	void loadSettings( const QDomElement & self );
@@ -72,7 +74,6 @@ private:
 
 	QString m_uri;
 
-	// this is a hack
 	LovelyView * m_view;
 
 	friend class LovelyView;
