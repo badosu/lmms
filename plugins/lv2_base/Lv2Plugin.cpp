@@ -97,7 +97,6 @@ bool Lv2Port::writeEvent( const MidiEvent& event, const f_cnt_t time )
 Lv2Plugin::Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t bufferSize ) :
 	m_descriptor( descriptor ),
 	m_instance( NULL ),
-	m_pluginMutex(),
 	m_bufferSize( bufferSize ),
 	m_stateString( NULL )
 {
@@ -120,7 +119,6 @@ Lv2Plugin::~Lv2Plugin()
 {
 	if( m_instance )
 	{
-		m_pluginMutex.lock();
 		deactivate();
 		cleanup();
 
@@ -131,7 +129,6 @@ Lv2Plugin::~Lv2Plugin()
 				free( m_ports[p].m_buffer );
 			}
 		}
-		m_pluginMutex.unlock();
 	}
 }
 
@@ -140,7 +137,6 @@ Lv2Plugin::~Lv2Plugin()
 
 bool Lv2Plugin::instantiate( double rate )
 {
-	m_pluginMutex.lock();
 	for( uint32_t p = 0; p < numPorts(); ++p )
 	{
 		Lv2Port port;
@@ -165,7 +161,6 @@ bool Lv2Plugin::instantiate( double rate )
 		m_ports.push_back( port );
 	}
 	m_instance = lilv_plugin_instantiate( m_descriptor->m_plugin, rate, lv2()->s_features );
-	m_pluginMutex.unlock();
 	return !!m_instance;
 }
 
@@ -216,7 +211,6 @@ void Lv2Plugin::run( const fpp_t nframes )
 		return;
 	}
 
-	m_pluginMutex.lock();
 	lv2()->setRate( engine::mixer()->framesPerPeriod() );
 	resizeBuffers( nframes );
 	for( int i = 0; i < m_ports.size(); ++i )
@@ -230,7 +224,6 @@ void Lv2Plugin::run( const fpp_t nframes )
 	{
 		m_ports[i].reset();
 	}
-	m_pluginMutex.unlock();
 }
 
 
