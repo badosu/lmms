@@ -33,6 +33,17 @@
 
 
 
+Lv2Port::Lv2Port() :
+	m_descriptor( NULL ),
+	m_evbuf( NULL ),
+	m_buffer( NULL ),
+	m_state( NULL )
+{
+}
+
+
+
+
 void * Lv2Port::buffer()
 {
 	switch( type() )
@@ -44,6 +55,7 @@ void * Lv2Port::buffer()
 		case TypeEvent:
 			return lv2_evbuf_get_buffer( m_evbuf );
 		default:
+			fprintf( stderr, "type for port `%s' unknown, returning NULL\n", symbol() );
 			return NULL;
 	}
 }
@@ -58,12 +70,13 @@ void Lv2Port::reset()
 		default:
 			break;
 	}
+	m_frame = 0;
 }
 
 
 
 
-bool Lv2Port::writeEvent( const MidiEvent& event, const MidiTime& time )
+bool Lv2Port::writeEvent( const MidiEvent& event, const f_cnt_t time )
 {
 	uint8_t msg[3];
 
@@ -71,8 +84,11 @@ bool Lv2Port::writeEvent( const MidiEvent& event, const MidiTime& time )
 	msg[1] = event.key() & 0x7f;
 	msg[2] = event.velocity();
 
+	// work around unordered events
+	m_frame = time > m_frame ? time : m_frame;
+
 	LV2_Evbuf_Iterator iter = lv2_evbuf_end( m_evbuf );
-	return lv2_evbuf_write( &iter, time, 0, midi_MidiEvent, 3, msg );
+	return lv2_evbuf_write( &iter, m_frame, 0, midi_MidiEvent, 3, msg );
 }
 
 
@@ -80,11 +96,14 @@ bool Lv2Port::writeEvent( const MidiEvent& event, const MidiTime& time )
 
 Lv2Plugin::Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t bufferSize ) :
 	m_descriptor( descriptor ),
-	m_bufferSize( bufferSize )
+	m_instance( NULL ),
+	m_pluginMutex(),
+	m_bufferSize( bufferSize ),
+	m_stateString( NULL )
 {
 	lv2()->setRate( rate );
 	lv2()->setBufferSize( engine::mixer()->framesPerPeriod() );
-	
+
 	if( !instantiate( rate ) )
 	{
 		fprintf( stderr, "Could not instantiate <%s>\n", m_descriptor->uri() );
@@ -101,6 +120,7 @@ Lv2Plugin::~Lv2Plugin()
 {
 	if( m_instance )
 	{
+		m_pluginMutex.lock();
 		deactivate();
 		cleanup();
 
@@ -111,6 +131,7 @@ Lv2Plugin::~Lv2Plugin()
 				free( m_ports[p].m_buffer );
 			}
 		}
+		m_pluginMutex.unlock();
 	}
 }
 
@@ -119,6 +140,7 @@ Lv2Plugin::~Lv2Plugin()
 
 bool Lv2Plugin::instantiate( double rate )
 {
+	m_pluginMutex.lock();
 	for( uint32_t p = 0; p < numPorts(); ++p )
 	{
 		Lv2Port port;
@@ -143,6 +165,7 @@ bool Lv2Plugin::instantiate( double rate )
 		m_ports.push_back( port );
 	}
 	m_instance = lilv_plugin_instantiate( m_descriptor->m_plugin, rate, lv2()->s_features );
+	m_pluginMutex.unlock();
 	return !!m_instance;
 }
 
@@ -193,6 +216,7 @@ void Lv2Plugin::run( const fpp_t nframes )
 		return;
 	}
 
+	m_pluginMutex.lock();
 	lv2()->setRate( engine::mixer()->framesPerPeriod() );
 	resizeBuffers( nframes );
 	for( int i = 0; i < m_ports.size(); ++i )
@@ -206,6 +230,7 @@ void Lv2Plugin::run( const fpp_t nframes )
 	{
 		m_ports[i].reset();
 	}
+	m_pluginMutex.unlock();
 }
 
 

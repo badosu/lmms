@@ -25,6 +25,7 @@
 
 #include <QVector>
 #include <QtGlobal>
+#include <QMutex>
 
 #include "MidiEvent.h"
 #include "MidiTime.h"
@@ -38,6 +39,8 @@
 class Lv2Port
 {
 public:
+	Lv2Port();
+
 	Lv2PortFlow flow() const { return m_descriptor->flow(); }
 	Lv2PortType type() const { return m_descriptor->type(); }
 	const char * symbol() const { return m_descriptor->symbol(); }
@@ -49,7 +52,7 @@ public:
 	void * buffer();
 	void reset();
 
-	bool writeEvent( const MidiEvent& event, const MidiTime& time );
+	bool writeEvent( const MidiEvent& event, const f_cnt_t time );
 
 private:
 	Lv2PortDescriptor * m_descriptor;
@@ -57,6 +60,8 @@ private:
 	float m_value;
 	LV2_Evbuf * m_evbuf;
 	float * m_buffer;
+
+	f_cnt_t m_frame;
 
 	LilvState * m_state;
 
@@ -83,7 +88,7 @@ public:
 	inline void deactivate() { lilv_instance_deactivate( m_instance ); }
 	inline void cleanup() { lilv_instance_free( m_instance ); }
 
-	inline bool writeEvent( const MidiEvent& event, const MidiTime& time )
+	inline bool writeEvent( const MidiEvent& event, const f_cnt_t time )
 	{
 		if( m_descriptor->portIndex( EventsIn ) != -1 )
 		{
@@ -110,6 +115,8 @@ private:
 	Lv2PluginDescriptor * m_descriptor;
 	LilvInstance * m_instance;
 	QVector<Lv2Port> m_ports;
+
+	QMutex m_pluginMutex;
 
 	fpp_t m_bufferSize;
 

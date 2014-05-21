@@ -464,6 +464,8 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 	delete[] mins;
 	delete[] maxs;
 	delete[] defs;
+
+	findPresets();
 }
 
 
@@ -505,11 +507,11 @@ void Lv2PluginDescriptor::findPresets()
 		if( labels )
 		{
 			const LilvNode * label = lilv_nodes_get_first( labels );
-			Lv2Preset * pset = new Lv2Preset( preset, lilv_node_as_string( label ) );
+			Lv2Preset * pset = new Lv2Preset( lilv_node_duplicate( preset ), strdup( lilv_node_as_string( label ) ) );
 			m_presets.push_back( pset );
 			lilv_nodes_free( labels );
 		}
 	}
 
-	//~ lilv_nodes_free( presets );
+	lilv_nodes_free( presets );
 }
