@@ -25,7 +25,6 @@
 
 #include <QVector>
 #include <QtGlobal>
-#include <QMutex>
 
 #include "MidiEvent.h"
 #include "MidiTime.h"
@@ -115,8 +114,6 @@ private:
 	Lv2PluginDescriptor * m_descriptor;
 	LilvInstance * m_instance;
 	QVector<Lv2Port> m_ports;
-
-	QMutex m_pluginMutex;
 
 	fpp_t m_bufferSize;
 
