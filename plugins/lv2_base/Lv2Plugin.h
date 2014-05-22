@@ -51,14 +51,17 @@ public:
 	void * buffer();
 	void reset();
 
-	bool writeEvent( const MidiEvent& event, const f_cnt_t time );
+	void writeEvent( const f_cnt_t time, const MidiEvent& event );
+	void sortEvents();
 
 private:
 	Lv2PortDescriptor * m_descriptor;
 
 	float m_value;
-	LV2_Evbuf * m_evbuf;
 	float * m_buffer;
+
+	QVector<QPair <f_cnt_t, MidiEvent> > m_rawbuf;
+	LV2_Evbuf * m_evbuf;
 
 	f_cnt_t m_frame;
 
@@ -87,13 +90,12 @@ public:
 	inline void deactivate() { lilv_instance_deactivate( m_instance ); }
 	inline void cleanup() { lilv_instance_free( m_instance ); }
 
-	inline bool writeEvent( const MidiEvent& event, const f_cnt_t time )
+	inline void writeEvent( const f_cnt_t time, const MidiEvent& event )
 	{
 		if( m_descriptor->portIndex( EventsIn ) != -1 )
 		{
-			return m_ports[m_descriptor->portIndex( EventsIn )].writeEvent( event, time );
+			m_ports[m_descriptor->portIndex( EventsIn )].writeEvent( time, event );
 		}
-		return false;
 	}
 
 	uint32_t numPorts() { return m_descriptor->numPorts(); }

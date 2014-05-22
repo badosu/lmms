@@ -119,7 +119,7 @@ PluginView * LovelyInstrument::instantiateView( QWidget * parent )
 	m_pluginMutex.lock();
 	if( m_plugin && m_plugin->instance() )
 	{
-		r = m_plugin->writeEvent( ev, time );
+		r = m_plugin->writeEvent( time, ev );
 	}
 	m_pluginMutex.unlock();
 
@@ -168,7 +168,7 @@ void LovelyInstrument::playNote( NotePlayHandle * n, sampleFrame * )
 		return;
 	}
 
-	int * key = new int( engine::getSong()->masterPitch() + n->midiKey() );
+	int * key = new int( instrumentTrack()->masterKey( n->midiKey() ) );
 	n->m_pluginData = static_cast<void *>( key );
 
 	if( m_plugin && m_plugin->instance() )
@@ -176,7 +176,7 @@ void LovelyInstrument::playNote( NotePlayHandle * n, sampleFrame * )
 		MidiEvent ev( MidiNoteOn );
 		ev.setKey( *key );
 		ev.setVelocity( n->volumeLevel( 0 ) * instrumentTrack()->midiPort()->baseVelocity() );
-		m_plugin->writeEvent( ev, n->offset() );
+		m_plugin->writeEvent( n->offset(), ev );
 	}
 	m_pluginMutex.unlock();
 }
@@ -192,7 +192,7 @@ void LovelyInstrument::deleteNotePluginData( NotePlayHandle * n )
 	{
 		MidiEvent ev( MidiNoteOff );
 		ev.setKey( *key );
-		m_plugin->writeEvent( ev, 0 );
+		m_plugin->writeEvent( 0, ev );
 	}
 	delete key;
 	m_pluginMutex.unlock();

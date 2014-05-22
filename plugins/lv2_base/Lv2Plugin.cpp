@@ -35,8 +35,8 @@
 
 Lv2Port::Lv2Port() :
 	m_descriptor( NULL ),
-	m_evbuf( NULL ),
 	m_buffer( NULL ),
+	m_evbuf( NULL ),
 	m_state( NULL )
 {
 }
@@ -76,19 +76,43 @@ void Lv2Port::reset()
 
 
 
-bool Lv2Port::writeEvent( const MidiEvent& event, const f_cnt_t time )
+void Lv2Port::writeEvent( const f_cnt_t time, const MidiEvent& event )
 {
-	uint8_t msg[3];
+	QPair<f_cnt_t, MidiEvent> qp( time, event );
+	m_rawbuf.push_back( qp );
+}
 
-	msg[0] = event.type();
-	msg[1] = event.key() & 0x7f;
-	msg[2] = event.velocity();
 
-	// work around unordered events
-	m_frame = time > m_frame ? time : m_frame;
 
-	LV2_Evbuf_Iterator iter = lv2_evbuf_end( m_evbuf );
-	return lv2_evbuf_write( &iter, m_frame, 0, midi_MidiEvent, 3, msg );
+
+static bool lessThan( const QPair<f_cnt_t, MidiEvent> a, const QPair<f_cnt_t, MidiEvent> b )
+{
+	return a.first < b.first;
+}
+
+
+
+
+void Lv2Port::sortEvents()
+{
+	if( type() != TypeEvent )
+	{
+		return;
+	}
+
+	qStableSort( m_rawbuf.begin(), m_rawbuf.end(), lessThan );
+	LV2_Evbuf_Iterator iter = lv2_evbuf_begin( m_evbuf );
+	for( uint32_t i = 0; i < m_rawbuf.size(); ++i )
+	{
+		uint8_t msg[3];
+
+		msg[0] = m_rawbuf[i].second.type();
+		msg[1] = m_rawbuf[i].second.key() & 0x7f;
+		msg[2] = m_rawbuf[i].second.velocity();
+
+		lv2_evbuf_write( &iter, m_rawbuf[i].first, 0, midi_MidiEvent, 3, msg );
+	}
+	m_rawbuf.clear();
 }
 
 
@@ -215,6 +239,7 @@ void Lv2Plugin::run( const fpp_t nframes )
 	resizeBuffers( nframes );
 	for( int i = 0; i < m_ports.size(); ++i )
 	{
+		m_ports[i].sortEvents();
 		lilv_instance_connect_port( m_instance, i, m_ports[i].buffer() );
 	}
 
