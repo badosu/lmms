@@ -205,7 +205,11 @@ void LovelyInstrument::saveSettings( QDomDocument & doc, QDomElement & self )
 {
 	self.setAttribute( "uri", m_uri );
 	m_plugin->saveState();
-	self.setAttribute( "state", QString( m_plugin->stateString() ) );
+
+	QDomCDATASection cdata = doc.createCDATASection( m_plugin->stateString() );
+	QDomElement state = doc.createElement( "state" );
+	state.appendChild( cdata );
+	self.appendChild( state );
 }
 
 
@@ -218,7 +222,12 @@ void LovelyInstrument::loadSettings( const QDomElement & self )
 	loadPlugin( self.attribute( "uri" ).toUtf8().constData() );
 	m_uri = self.attribute( "uri" );
 
-	if( self.hasAttribute( "state" ) )
+	QDomElement state = self.firstChildElement( "state" );
+	if( !state.isNull() )
+	{
+		m_plugin->loadState( state.text().toUtf8().constData() );
+	}
+	else if( self.hasAttribute( "state" ) )
     {
 		m_plugin->loadState( self.attribute( "state" ).toUtf8().constData() );
 	}
