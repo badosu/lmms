@@ -23,6 +23,9 @@
  */
 
 
+#ifndef LV2BASE_H
+#define LV2BASE_H
+
 #include "Plugin.h"
 #include "embed.h"
 
@@ -143,7 +146,7 @@ private:
 
 
 
-class EXPORT Lv2Preset
+class PLUGIN_EXPORT Lv2Preset
 {
 public:
 	Lv2Preset( const LilvNode * node, const char * name ) : m_node( node ), m_name( name ) {}
@@ -264,3 +267,5 @@ private:
 
 
 Lv2Base * lv2();
+
+#endif

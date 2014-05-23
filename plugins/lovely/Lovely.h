@@ -43,7 +43,7 @@ class LovelyView;
 
 
 
-class LovelyInstrument : public Instrument
+class PLUGIN_EXPORT LovelyInstrument : public Instrument
 {
 	Q_OBJECT
 public:
@@ -82,7 +82,7 @@ private:
 
 
 
-class LovelyView : public InstrumentView
+class PLUGIN_EXPORT LovelyView : public InstrumentView
 {
 	Q_OBJECT
 public:
