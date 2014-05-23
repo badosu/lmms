@@ -23,6 +23,9 @@
  */
 
 
+#ifndef LV2PLUGIN_H
+#define LV2PLUGIN_H
+
 #include <QVector>
 #include <QtGlobal>
 
@@ -35,7 +38,7 @@
 
 
 
-class Lv2Port
+class PLUGIN_EXPORT Lv2Port
 {
 public:
 	Lv2Port();
@@ -73,7 +76,7 @@ private:
 
 
 
-class Lv2Plugin
+class PLUGIN_EXPORT Lv2Plugin
 {
 public:
 	Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t bufferSize );
@@ -121,3 +124,5 @@ private:
 
 	const char * m_stateString;
 };
+
+#endif

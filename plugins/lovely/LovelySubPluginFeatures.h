@@ -29,7 +29,7 @@
 #include "Plugin.h"
 
 
-class LovelySubPluginFeatures : public Plugin::Descriptor::SubPluginFeatures
+class PLUGIN_EXPORT LovelySubPluginFeatures : public Plugin::Descriptor::SubPluginFeatures
 {
 public:
 	LovelySubPluginFeatures( Plugin::PluginTypes type );
