@@ -306,13 +306,13 @@ LovelyView::~LovelyView()
 void LovelyView::findPresets()
 {
 	m_presetModel.clear();
-	m_presetModel.addItem( "None", NULL );
 
 	if( !m_instrument->m_plugin )
 	{
 		return;
 	}
 
+	m_presetModel.addItem( m_instrument->m_plugin->descriptor()->name(), NULL );
 	for( int i = 0; i < m_instrument->m_plugin->descriptor()->numPresets(); ++i )
 	{
 		m_presetModel.addItem( m_instrument->m_plugin->descriptor()->preset( i )->name(), NULL );
