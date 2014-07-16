@@ -203,6 +203,11 @@ void LovelyInstrument::deleteNotePluginData( NotePlayHandle * n )
 
 void LovelyInstrument::saveSettings( QDomDocument & doc, QDomElement & self )
 {
+	if( !m_plugin || !m_plugin->instance() )
+	{
+		return;
+	}
+
 	self.setAttribute( "uri", m_uri );
 	m_plugin->saveState();
 
