@@ -489,6 +489,29 @@ Lv2PluginDescriptor::~Lv2PluginDescriptor()
 
 
 
+static bool lessThan( Lv2Preset * a, Lv2Preset * b )
+{
+	// you filthy C coder
+
+	char * aa = const_cast<char *>( a->name() );
+	char * bb = const_cast<char *>( b->name() );
+
+	while( *aa == *bb )
+	{
+		if( *aa == '\0' || *bb == '\0' )
+		{
+			break;
+		}
+		++aa;
+		++bb;
+	}
+
+	return *aa < *bb;
+}
+
+
+
+
 void Lv2PluginDescriptor::findPresets()
 {
 	if( m_presets.size() )
@@ -514,4 +537,5 @@ void Lv2PluginDescriptor::findPresets()
 	}
 
 	lilv_nodes_free( presets );
+	qStableSort( m_presets.begin(), m_presets.end(), lessThan );
 }
