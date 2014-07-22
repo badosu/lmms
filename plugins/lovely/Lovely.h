@@ -34,6 +34,9 @@
 #include "Instrument.h"
 #include "InstrumentView.h"
 
+#include "Lv2Plugin.h"
+#include "Lv2Controls.h"
+
 
 
 
@@ -97,6 +100,7 @@ public slots:
 
 private:
 	LovelyInstrument * m_instrument;
+	Lv2Controls * m_controls;
 
 	ComboBoxModel m_presetModel;
 	comboBox m_presetList;
