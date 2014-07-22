@@ -31,8 +31,6 @@
 #include "InstrumentPlayHandle.h"
 #include "text_float.h"
 
-#include "Lv2Plugin.h"
-
 #include "Lovely.h"
 #include "LovelySubPluginFeatures.h"
 
