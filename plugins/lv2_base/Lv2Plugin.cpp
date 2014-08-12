@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
- * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
+ * This file is part of LMMS - http://lmms.sourceforge.net
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -35,10 +35,35 @@
 
 Lv2Port::Lv2Port() :
 	m_descriptor( NULL ),
+	m_plugin( NULL ),
 	m_buffer( NULL ),
-	m_evbuf( NULL ),
+	m_atomSequence( NULL ),
 	m_state( NULL )
 {
+}
+
+
+
+
+Lv2Port::~Lv2Port()
+{
+}
+
+
+
+
+void Lv2Port::cleanup()
+{
+	if( m_buffer )
+	{
+		free( static_cast<void *>( m_buffer ) );
+		m_buffer = NULL;
+	}
+	if( m_atomSequence )
+	{
+		free( static_cast<void *>( m_atomSequence ) );
+		m_buffer = NULL;
+	}
 }
 
 
@@ -53,7 +78,7 @@ void * Lv2Port::buffer()
 		case TypeAudio:
 			return static_cast<void *>( m_buffer );
 		case TypeEvent:
-			return lv2_evbuf_get_buffer( m_evbuf );
+			return static_cast<void *>( m_atomSequence );
 		default:
 			fprintf( stderr, "type for port `%s' unknown, returning NULL\n", symbol() );
 			return NULL;
@@ -65,7 +90,6 @@ void Lv2Port::reset()
 	switch( type() )
 	{
 		case TypeEvent:
-			lv2_evbuf_reset( m_evbuf, flow() == FlowInput );
 			break;
 		default:
 			break;
@@ -76,43 +100,20 @@ void Lv2Port::reset()
 
 
 
-void Lv2Port::writeEvent( const f_cnt_t time, const MidiEvent& event )
-{
-	QPair<f_cnt_t, MidiEvent> qp( time, event );
-	m_rawbuf.push_back( qp );
-}
-
-
-
-
-static bool lessThan( const QPair<f_cnt_t, MidiEvent> a, const QPair<f_cnt_t, MidiEvent> b )
-{
-	return a.first < b.first;
-}
-
-
-
-
-void Lv2Port::sortEvents()
+void Lv2Port::convertEvents()
 {
 	if( type() != TypeEvent )
 	{
 		return;
 	}
 
-	qStableSort( m_rawbuf.begin(), m_rawbuf.end(), lessThan );
-	LV2_Evbuf_Iterator iter = lv2_evbuf_begin( m_evbuf );
-	for( uint32_t i = 0; i < m_rawbuf.size(); ++i )
+	if( eventType() != EventTypeMidi )
 	{
-		uint8_t msg[3];
-
-		msg[0] = m_rawbuf[i].second.type();
-		msg[1] = m_rawbuf[i].second.key() & 0x7f;
-		msg[2] = m_rawbuf[i].second.velocity();
-
-		lv2_evbuf_write( &iter, m_rawbuf[i].first, 0, midi_MidiEvent, 3, msg );
+		return;
 	}
-	m_rawbuf.clear();
+
+	LV2_Atom_Sequence * processed = m_noteConverter.process( m_atomSequence, m_plugin->baseVelocity() );
+	memcpy( m_atomSequence, processed, sizeof( LV2_Atom_Sequence ) + lv2()->s_sequenceSize );
 }
 
 
@@ -148,10 +149,7 @@ Lv2Plugin::~Lv2Plugin()
 
 		for( uint32_t p = 0; p < m_ports.size(); ++p )
 		{
-			if( m_ports[p].type() == TypeAudio && m_ports[p].m_buffer )
-			{
-				free( m_ports[p].m_buffer );
-			}
+			m_ports[p].cleanup();
 		}
 	}
 }
@@ -166,6 +164,7 @@ bool Lv2Plugin::instantiate( double rate )
 		Lv2Port port;
 		Lv2PortDescriptor * portdesc = m_descriptor->portDescriptor( p );
 		port.m_descriptor = portdesc;
+		port.m_plugin = this;
 
 		switch( portdesc->type() )
 		{
@@ -176,7 +175,7 @@ bool Lv2Plugin::instantiate( double rate )
 				port.m_buffer = static_cast<float *>( calloc( m_bufferSize, sizeof( float ) ) );
 				break;
 			case TypeEvent:
-				port.m_evbuf = lv2_evbuf_new( lv2()->s_sequenceSize, portdesc->evbufType(), atom_Chunk, atom_Sequence );
+				port.m_atomSequence = static_cast<LV2_Atom_Sequence *>( calloc( 1, sizeof( LV2_Atom_Sequence ) + lv2()->s_sequenceSize ) );
 				port.reset();
 				break;
 			default:
@@ -239,7 +238,7 @@ void Lv2Plugin::run( const fpp_t nframes )
 	resizeBuffers( nframes );
 	for( int i = 0; i < m_ports.size(); ++i )
 	{
-		m_ports[i].sortEvents();
+		m_ports[i].convertEvents();
 		lilv_instance_connect_port( m_instance, i, m_ports[i].buffer() );
 	}
 

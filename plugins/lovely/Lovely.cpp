@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
- * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
+ * This file is part of LMMS - http://lmms.sourceforge.net
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -30,6 +30,8 @@
 #include "InstrumentTrack.h"
 #include "InstrumentPlayHandle.h"
 #include "text_float.h"
+
+#include "Lv2NoteHandle.h"
 
 #include "Lovely.h"
 #include "LovelySubPluginFeatures.h"
@@ -80,10 +82,12 @@ LovelyInstrument::LovelyInstrument( InstrumentTrack * track ) :
 	Instrument( track, &lovely_plugin_descriptor ),
 	m_plugin( NULL ),
 	m_pluginMutex(),
-	m_view( NULL )
+	m_view( NULL ),
+	m_id( 0 )
 {
 	InstrumentPlayHandle * handle = new InstrumentPlayHandle( this );
 	engine::mixer()->addPlayHandle( handle );
+	lv2_atom_forge_init( &m_forge, &lv2()->urid__map );
 }
 
 
@@ -110,19 +114,10 @@ PluginView * LovelyInstrument::instantiateView( QWidget * parent )
 
 
 
-/* bool LovelyInstrument::handleMidiEvent( const MidiEvent & ev, const MidiTime & time )
+static bool lessThan( Lv2NoteEvent & a, Lv2NoteEvent & b )
 {
-	bool r = true;
-
-	m_pluginMutex.lock();
-	if( m_plugin && m_plugin->instance() )
-	{
-		r = m_plugin->writeEvent( time, ev );
-	}
-	m_pluginMutex.unlock();
-
-	return r;
-} */
+	return a.first < b.first;
+}
 
 
 
@@ -136,11 +131,54 @@ void LovelyInstrument::play( sampleFrame * buffer )
 		return;
 	}
 
-	fpp_t nframes = engine::mixer()->framesPerPeriod();
+	m_plugin->setBaseVelocity( instrumentTrack()->midiPort()->baseVelocity() );
+	const fpp_t nframes = engine::mixer()->framesPerPeriod();
 	m_plugin->resizeBuffers( nframes );
 
-	float * left = m_plugin->buffer( LeftOut );
-	float * right = m_plugin->buffer( RightOut );
+	LV2_Atom_Forge_Frame frame;
+	LV2_Atom_Sequence * atomSequence = static_cast<LV2_Atom_Sequence *>( m_plugin->buffer( EventsIn ) );
+
+	lv2_atom_sequence_clear( atomSequence );
+	memset( LV2_ATOM_CONTENTS( LV2_Atom_Sequence, atomSequence ), 0, lv2()->s_sequenceSize );
+
+	lv2_atom_forge_set_buffer( &m_forge, reinterpret_cast<uint8_t *>( atomSequence ), lv2()->s_sequenceSize );
+	lv2_atom_forge_sequence_head( &m_forge, &m_frame, 0 );
+
+	qSort( m_events.begin(), m_events.end(), lessThan );
+	for( int i = 0; i < m_events.size(); ++i )
+	{
+		Lv2NoteEvent * ev = &m_events[i];
+
+		lv2_atom_forge_frame_time( &m_forge, ev->first );
+		lv2_atom_forge_object( &m_forge, &frame, 0, note_NoteEvent );
+
+		for( int p = 0; p < ev->second.size(); ++p )
+		{
+			Lv2NoteProperty * prop = &ev->second[p];
+			lv2_atom_forge_key( &m_forge, prop->first );
+			switch( prop->first )
+			{
+				case note_id:
+					lv2_atom_forge_int( &m_forge, prop->second.intValue );
+					break;
+				case note_gate:
+					lv2_atom_forge_bool( &m_forge, prop->second.intValue );
+					break;
+				case note_frequency:
+				case note_velocity:
+				case note_stereoPanning:
+				default:
+					lv2_atom_forge_float( &m_forge, prop->second.floatValue );
+					break;
+			}
+		}
+		lv2_atom_forge_pop( &m_forge, &frame );
+	}
+	lv2_atom_forge_pop( &m_forge, &m_frame );
+	m_events.clear();
+
+	float * left = static_cast<float *>( m_plugin->buffer( LeftOut ) );
+	float * right = static_cast<float *>( m_plugin->buffer( RightOut ) );
 
 	m_plugin->run( nframes );
 
@@ -159,23 +197,104 @@ void LovelyInstrument::play( sampleFrame * buffer )
 
 void LovelyInstrument::playNote( NotePlayHandle * n, sampleFrame * )
 {
-	m_pluginMutex.lock();
-	if( n->totalFramesPlayed() )
+	if( !m_plugin )
 	{
-		m_pluginMutex.unlock();
 		return;
 	}
 
-	int * key = new int( instrumentTrack()->masterKey( n->midiKey() ) );
-	n->m_pluginData = static_cast<void *>( key );
+	m_pluginMutex.lock();
 
-	if( m_plugin && m_plugin->instance() )
+	Lv2NoteHandle * nh;
+	Lv2NoteObject object;
+
+	Lv2NoteObject ev;
+
+	Lv2NotePropertyValue pvID;
+	Lv2NotePropertyValue pvGate;
+	Lv2NotePropertyValue pvFrequency;
+	Lv2NotePropertyValue pvVelocity;
+	Lv2NotePropertyValue pvPanning;
+	pvID.intValue = 0;
+
+	if( n->totalFramesPlayed() == 0 || n->m_pluginData == NULL )
 	{
-		MidiEvent ev( MidiNoteOn );
-		ev.setKey( *key );
-		ev.setVelocity( n->volumeLevel( 0 ) * instrumentTrack()->midiPort()->baseVelocity() );
-		m_plugin->writeEvent( n->offset(), ev );
+		uint32_t eventsIn = m_plugin->descriptor()->portIndex( EventsIn );
+		Lv2PortDescriptor * eventPort = m_plugin->descriptor()->portDescriptor( eventsIn );
+
+		float frequency = ( eventPort->eventType() == EventTypeNote ) ? n->frequency() : n->unpitchedFrequency();
+
+		nh = new Lv2NoteHandle( frequency / 2.0f, n->getVolume() / 100.0f, n->getPanning() / 100.0f, newNoteID() );
+		n->m_pluginData = static_cast<void *>( nh );
+
+		pvID.intValue = nh->id();
+		ev.push_back( Lv2NoteProperty( note_id, pvID ) );
+
+		pvGate.intValue = 1;
+		ev.push_back( Lv2NoteProperty( note_gate, pvGate ) );
+
+		pvFrequency.floatValue = nh->frequency();
+		ev.push_back( Lv2NoteProperty( note_frequency, pvFrequency ) );
+
+		pvVelocity.floatValue = nh->velocity();
+		ev.push_back( Lv2NoteProperty( note_velocity, pvVelocity ) );
+
+		pvPanning.floatValue = nh->panning();
+		ev.push_back( Lv2NoteProperty( note_stereoPanning, pvPanning ) );
 	}
+	else
+	{
+		nh = static_cast<Lv2NoteHandle *>( n->m_pluginData );
+
+		nh->setFrequency( n->frequency() / 2.0f );
+		nh->setVelocity( n->getVolume() / 100.0f );
+		nh->setPanning( n->getPanning() / 100.0f );
+
+		float * frequency = NULL;
+		float * velocity = NULL;
+		float * panning = NULL;
+
+		nh->query( &frequency, &velocity, &panning );
+
+		if( n->isReleased() )
+		{
+			if( nh->gate() )
+			{
+				pvID.intValue = nh->id();
+				ev.push_back( Lv2NoteProperty( note_id, pvID ) );
+
+				nh->setGate( false );
+				pvGate.intValue = 0;
+				ev.push_back( Lv2NoteProperty( note_gate, pvGate ) );
+			}
+		}
+		else if( frequency || velocity || panning )
+		{
+			pvID.intValue = nh->id();
+			ev.push_back( Lv2NoteProperty( note_id, pvID ) );
+
+			if( frequency )
+			{
+				pvFrequency.floatValue = *frequency;
+				ev.push_back( Lv2NoteProperty( note_frequency, pvFrequency ) );
+			}
+			if( velocity )
+			{
+				pvVelocity.floatValue = *velocity;
+				ev.push_back( Lv2NoteProperty( note_velocity, pvVelocity ) );
+			}
+			if( panning )
+			{
+				pvPanning.floatValue = *panning;
+				ev.push_back( Lv2NoteProperty( note_stereoPanning, pvPanning ) );
+			}
+		}
+	}
+
+	if( pvID.intValue )
+	{
+		m_events.push_back( Lv2NoteEvent( n->noteOffset(), ev ) );
+	}
+
 	m_pluginMutex.unlock();
 }
 
@@ -185,14 +304,23 @@ void LovelyInstrument::playNote( NotePlayHandle * n, sampleFrame * )
 void LovelyInstrument::deleteNotePluginData( NotePlayHandle * n )
 {
 	m_pluginMutex.lock();
-	int * key = static_cast<int *>( n->m_pluginData );
-	if( m_plugin && m_plugin->instance() )
+	Lv2NoteHandle * nh = static_cast<Lv2NoteHandle *>( n->m_pluginData );
+	if( nh->gate() )
 	{
-		MidiEvent ev( MidiNoteOff );
-		ev.setKey( *key );
-		m_plugin->writeEvent( 0, ev );
+		Lv2NoteObject object;
+		Lv2NoteObject ev;
+		Lv2NotePropertyValue pvID;
+		Lv2NotePropertyValue pvGate;
+
+		pvID.intValue = nh->id();
+		ev.push_back( Lv2NoteProperty( note_id, pvID ) );
+
+		pvGate.intValue = 0;
+		ev.push_back( Lv2NoteProperty( note_gate, pvGate ) );
+
+		m_events.push_back( Lv2NoteEvent( n->offset(), ev ) );
 	}
-	delete key;
+	delete nh;
 	m_pluginMutex.unlock();
 }
 
@@ -220,6 +348,7 @@ void LovelyInstrument::saveSettings( QDomDocument & doc, QDomElement & self )
 
 void LovelyInstrument::loadSettings( const QDomElement & self )
 {
+	engine::mixer()->removePlayHandles( instrumentTrack(), false );
 	m_pluginMutex.lock();
 
 	loadPlugin( self.attribute( "uri" ).toUtf8().constData() );
@@ -265,6 +394,19 @@ void LovelyInstrument::loadPlugin( const char * uri )
 	{
 		m_view->findPresets();
 	}
+}
+
+
+
+
+const uint32_t LovelyInstrument::newNoteID()
+{
+	do
+	{
+		++m_id;
+	}
+	while( m_id == 0 );
+	return m_id;
 }
 
 

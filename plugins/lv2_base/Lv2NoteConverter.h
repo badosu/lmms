@@ -1,5 +1,5 @@
 /*
- * LovelySubPluginFeatures.h - LV2 instrument host for LMMS
+ * Lv2NoteConverter.h - Convert LV2 note events to MIDI events
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
@@ -23,19 +23,34 @@
  */
 
 
-#ifndef LOVELY_SUBPLUGIN_FEATURES_H
-#define LOVELY_SUBPLUGIN_FEATURES_H
+#ifndef LV2NOTECONVERTER_H
+#define LV2NOTECONVERTER_H
 
-#include "Plugin.h"
+#include "Lv2Base.h"
 
 
-class PLUGIN_EXPORT LovelySubPluginFeatures : public Plugin::Descriptor::SubPluginFeatures
+
+
+class Lv2NoteConverter
 {
 public:
-	LovelySubPluginFeatures( Plugin::PluginTypes type );
-	virtual void fillDescriptionWidget( QWidget * parent, const Key * key ) const;
-	virtual void listSubPluginKeys( const Plugin::Descriptor * desc, KeyList & kl ) const;
+	Lv2NoteConverter();
+	~Lv2NoteConverter();
+
+	LV2_Atom_Sequence * process( const LV2_Atom_Sequence * inBuffer, uint8_t baseVelocity );
+
+private:
+	const LV2_Atom_Sequence * m_inBuffer;
+	LV2_Atom_Sequence * m_outBuffer;
+
+	uint8_t m_baseVelocity;
+
+	uint32_t m_ids[128];
+	LV2_Atom_Forge m_forge;
+	LV2_Atom_Forge_Frame m_frame;
 };
+
+
 
 
 #endif

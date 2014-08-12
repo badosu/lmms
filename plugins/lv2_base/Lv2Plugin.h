@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
- * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
+ * This file is part of LMMS - http://lmms.sourceforge.net
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -32,8 +32,12 @@
 #include "MidiEvent.h"
 #include "MidiTime.h"
 #include "Lv2Base.h"
+#include "Lv2NoteConverter.h"
 
-#include "lv2_evbuf.h"
+
+
+
+class Lv2Plugin;
 
 
 
@@ -42,9 +46,14 @@ class PLUGIN_EXPORT Lv2Port
 {
 public:
 	Lv2Port();
+	~Lv2Port();
+
+	void cleanup();
 
 	Lv2PortFlow flow() const { return m_descriptor->flow(); }
 	Lv2PortType type() const { return m_descriptor->type(); }
+	Lv2EventType eventType() const { return m_descriptor->eventType(); }
+
 	const char * symbol() const { return m_descriptor->symbol(); }
 	const char * name() const { return m_descriptor->name(); }
 
@@ -55,16 +64,17 @@ public:
 	void reset();
 
 	void writeEvent( const f_cnt_t time, const MidiEvent& event );
-	void sortEvents();
+	void convertEvents();
 
 private:
 	Lv2PortDescriptor * m_descriptor;
+	Lv2Plugin * m_plugin;
 
 	float m_value;
 	float * m_buffer;
+	LV2_Atom_Sequence * m_atomSequence;
 
-	QVector<QPair <f_cnt_t, MidiEvent> > m_rawbuf;
-	LV2_Evbuf * m_evbuf;
+	Lv2NoteConverter m_noteConverter;
 
 	f_cnt_t m_frame;
 
@@ -107,7 +117,7 @@ public:
 	void resizeBuffers( fpp_t newSize );
 	void run( const fpp_t nframes );
 
-	float * buffer( PortDesignation designation ) { return static_cast<float *>( m_ports[m_descriptor->portIndex( designation )].buffer() ); }
+	void * buffer( PortDesignation designation ) { return m_ports[m_descriptor->portIndex( designation )].buffer(); }
 
 	void loadState( const char * stateString );
 	void saveState();
@@ -115,10 +125,15 @@ public:
 
 	void loadPreset( int index );
 
+	void setBaseVelocity( uint8_t value ) { m_baseVelocity = value; }
+	const uint8_t baseVelocity() const { return m_baseVelocity; }
+
 private:
 	Lv2PluginDescriptor * m_descriptor;
 	LilvInstance * m_instance;
 	QVector<Lv2Port> m_ports;
+
+	uint8_t m_baseVelocity;
 
 	fpp_t m_bufferSize;
 

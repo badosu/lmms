@@ -1,5 +1,5 @@
 /*
- * LovelySubPluginFeatures.h - LV2 instrument host for LMMS
+ * Lv2NoteHandle.cpp - LV2 note events
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
@@ -23,19 +23,39 @@
  */
 
 
-#ifndef LOVELY_SUBPLUGIN_FEATURES_H
-#define LOVELY_SUBPLUGIN_FEATURES_H
-
-#include "Plugin.h"
+#include "Lv2NoteHandle.h"
 
 
-class PLUGIN_EXPORT LovelySubPluginFeatures : public Plugin::Descriptor::SubPluginFeatures
+
+
+Lv2NoteHandle::Lv2NoteHandle( float frequency, float velocity, float panning, uint32_t id ) :
+	m_gate( true ),
+	m_frequency( frequency ),
+	m_velocity( velocity ),
+	m_panning( panning ),
+	m_oldFrequency( frequency - 1 ),
+	m_oldVelocity( velocity - 1 ),
+	m_oldPanning( panning - 1 ),
+	m_id( id )
 {
-public:
-	LovelySubPluginFeatures( Plugin::PluginTypes type );
-	virtual void fillDescriptionWidget( QWidget * parent, const Key * key ) const;
-	virtual void listSubPluginKeys( const Plugin::Descriptor * desc, KeyList & kl ) const;
-};
+}
 
 
-#endif
+
+
+Lv2NoteHandle::~Lv2NoteHandle() {}
+
+
+
+
+void Lv2NoteHandle::query( float ** frequency, float ** velocity, float ** panning )
+{
+	*frequency = ( m_frequency != m_oldFrequency ) ? &m_frequency : NULL;
+	m_oldFrequency = m_frequency;
+
+	*velocity = ( m_velocity != m_oldVelocity ) ? &m_velocity : NULL;
+	m_oldVelocity = m_velocity;
+
+	*panning = ( m_panning != m_oldPanning ) ? &m_panning : NULL;
+	m_oldPanning = m_panning;
+}

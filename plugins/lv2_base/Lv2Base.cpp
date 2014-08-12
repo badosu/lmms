@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
- * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
+ * This file is part of LMMS - http://lmms.sourceforge.net
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -150,11 +150,11 @@ void Lv2Base::init()
 	s_uriMap.push_back( LV2_ATOM__Float );
 	s_uriMap.push_back( LV2_ATOM__Int );
 	s_uriMap.push_back( LV2_ATOM__Long );
+	s_uriMap.push_back( LV2_ATOM__Object );
 	s_uriMap.push_back( LV2_ATOM__Sequence );
 	s_uriMap.push_back( LV2_BUF_SIZE__maxBlockLength );
 	s_uriMap.push_back( LV2_BUF_SIZE__minBlockLength );
 	s_uriMap.push_back( LV2_BUF_SIZE__sequenceSize );
-	s_uriMap.push_back( LV2_EVENT__EventPort );
 	s_uriMap.push_back( LV2_CORE__AudioPort );
 	s_uriMap.push_back( LV2_CORE__ControlPort );
 	s_uriMap.push_back( LV2_CORE__InputPort );
@@ -163,6 +163,12 @@ void Lv2Base::init()
 	s_uriMap.push_back( LV2_CORE__control );
 	s_uriMap.push_back( LV2_CORE__name );
 	s_uriMap.push_back( LV2_MIDI__MidiEvent );
+	s_uriMap.push_back( LV2_NOTE__NoteEvent );
+	s_uriMap.push_back( LV2_NOTE__id );
+	s_uriMap.push_back( LV2_NOTE__frequency );
+	s_uriMap.push_back( LV2_NOTE__gate );
+	s_uriMap.push_back( LV2_NOTE__stereoPanning );
+	s_uriMap.push_back( LV2_NOTE__velocity );
 	s_uriMap.push_back( LV2_PARAMETERS__sampleRate );
 	s_uriMap.push_back( LV2_PORT_GROUPS__left );
 	s_uriMap.push_back( LV2_PORT_GROUPS__right );
@@ -286,6 +292,9 @@ Lv2Base * lv2()
 // LV2PluginDescriptor
 // ------------------------------------------------------------------------
 
+#define GET_PORT(PLUGIN, CLASS, DESIGNATION) const_cast<LilvPort *>( \
+	lilv_plugin_get_port_by_designation( ( PLUGIN ), \
+	lv2()->node( ( CLASS ) ), lv2()->node( ( DESIGNATION ) ) ) );
 
 Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 	m_plugin( plugin )
@@ -312,10 +321,10 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 	m_isInstrument = lilv_node_equals( lilv_plugin_class_get_uri( cls ), lv2()->node( lv2_InstrumentPlugin ) );
 
 	// Port ranges
-	float * mins = new float[numPorts()];
-	float * maxs = new float[numPorts()];
-	float * defs = new float[numPorts()];
-	lilv_plugin_get_port_ranges_float( m_plugin, mins, maxs, defs );
+	float * minimums = new float[numPorts()];
+	float * maximums = new float[numPorts()];
+	float * defaults = new float[numPorts()];
+	lilv_plugin_get_port_ranges_float( m_plugin, minimums, maximums, defaults );
 
 	// Determine correct input and output ports
 	for( int i = 0; i < NumPortDesignations; ++i )
@@ -323,37 +332,37 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 		m_portIndex[i] = -1;
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_InputPort ), lv2()->node( pg_left ) ) );
+	port = GET_PORT( m_plugin, lv2_InputPort, pg_left );
 	if( port )
 	{
 		m_portIndex[LeftIn] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_InputPort ), lv2()->node( pg_right ) ) );
+	port = GET_PORT( m_plugin, lv2_InputPort, pg_right );
 	if( port )
 	{
 		m_portIndex[RightIn] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_OutputPort ), lv2()->node( pg_left ) ) );
+	port = GET_PORT( m_plugin, lv2_OutputPort, pg_left );
 	if( port )
 	{
 		m_portIndex[LeftOut] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_OutputPort ), lv2()->node( pg_right ) ) );
+	port = GET_PORT( m_plugin, lv2_OutputPort, pg_right );
 	if( port )
 	{
 		m_portIndex[RightOut] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_InputPort ), lv2()->node( lv2_control ) ) );
+	port = GET_PORT( m_plugin, lv2_InputPort, lv2_control );
 	if( port )
 	{
 		m_portIndex[EventsIn] = lilv_port_get_index( m_plugin, port );
 	}
 
-	port = const_cast<LilvPort *>( lilv_plugin_get_port_by_designation( m_plugin, lv2()->node( lv2_OutputPort ), lv2()->node( lv2_control ) ) );
+	port = GET_PORT( m_plugin, lv2_OutputPort, lv2_control );
 	if( port )
 	{
 		m_portIndex[EventsOut] = lilv_port_get_index( m_plugin, port );
@@ -383,9 +392,9 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 		if( lilv_port_is_a( m_plugin, port, lv2()->node( lv2_ControlPort ) ) )
 		{
 			portdesc->m_type = TypeControl;
-			portdesc->m_minimum = mins[p];
-			portdesc->m_maximum = maxs[p];
-			portdesc->m_default = defs[p];
+			portdesc->m_minimum = minimums[p];
+			portdesc->m_maximum = maximums[p];
+			portdesc->m_default = defaults[p];
 		}
 		else if( lilv_port_is_a( m_plugin, port, lv2()->node( lv2_AudioPort ) ) )
 		{
@@ -417,10 +426,25 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 					break;
 			}
 		}
-		else if( lilv_port_is_a( m_plugin, port, lv2()->node( atom_AtomPort ) ) || lilv_port_is_a( m_plugin, port, lv2()->node( ev_EventPort ) ) )
+		else if( lilv_port_is_a( m_plugin, port, lv2()->node( atom_AtomPort ) ) )
 		{
 			portdesc->m_type = TypeEvent;
-			portdesc->m_evbufType = lilv_port_is_a( m_plugin, port, lv2()->node( atom_AtomPort ) ) ? LV2_EVBUF_ATOM : LV2_EVBUF_EVENT;
+			if( lilv_port_supports_event( m_plugin, port, lv2()->node( note_NoteEvent ) ) )
+			{
+				portdesc->m_eventType = EventTypeNote;
+			}
+			else if( lilv_port_supports_event( m_plugin, port, lv2()->node( midi_MidiEvent ) ) )
+			{
+				portdesc->m_eventType = EventTypeMidi;
+			}
+			else
+			{
+				portdesc->m_eventType = EventTypeUnknown;
+				if( m_isInstrument )
+				{
+					m_isCompatible = false;
+				}
+			}
 
 			switch( portdesc->flow() )
 			{
@@ -440,6 +464,11 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 					m_isCompatible = false;
 					break;
 			}
+		}
+		else
+		{
+			portdesc->m_type = TypeUnknown;
+			m_isCompatible = false;
 		}
 
 		m_ports.push_back( portdesc );
@@ -461,9 +490,9 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 		m_isCompatible = false;
 	}
 
-	delete[] mins;
-	delete[] maxs;
-	delete[] defs;
+	delete[] minimums;
+	delete[] maximums;
+	delete[] defaults;
 
 	findPresets();
 }
