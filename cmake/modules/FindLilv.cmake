@@ -1,6 +1,6 @@
 
 INCLUDE(FindPkgConfig)
-pkg_check_modules(LILV lilv-0)
+pkg_check_modules(LILV lilv-0>=0.20.0)
 
 IF(LILV_LIBRARIES AND LILV_INCLUDE_DIRS)
 	SET(LILV_FOUND TRUE)
