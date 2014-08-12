@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
- * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
+ * This file is part of LMMS - http://lmms.sourceforge.net
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -28,6 +28,9 @@
 
 #include <QtCore/QMutex>
 
+#include <QPair>
+#include <QVector>
+
 #include <QListWidget>
 #include "combobox.h"
 
@@ -46,6 +49,20 @@ class LovelyView;
 
 
 
+typedef union
+{
+	float floatValue;
+	uint32_t intValue;
+}
+Lv2NotePropertyValue;
+
+typedef QPair<LV2_URID, Lv2NotePropertyValue> Lv2NoteProperty;
+typedef QVector<Lv2NoteProperty> Lv2NoteObject;
+typedef QPair<f_cnt_t, Lv2NoteObject> Lv2NoteEvent;
+
+
+
+
 class PLUGIN_EXPORT LovelyInstrument : public Instrument
 {
 	Q_OBJECT
@@ -59,9 +76,8 @@ public:
 
 	virtual PluginView * instantiateView( QWidget * parent );
 
-	virtual Flags flags() const { return IsSingleStreamed | IsMidiBased; }
+	virtual Flags flags() const { return IsSingleStreamed; }
 
-	//~ virtual bool handleMidiEvent( const MidiEvent & event, const MidiTime & time );
 	virtual void play( sampleFrame * buffer );
 	virtual void playNote( NotePlayHandle * n, sampleFrame * );
 	virtual void deleteNotePluginData( NotePlayHandle * n );
@@ -71,13 +87,20 @@ public:
 
 	void loadPlugin( const char * uri );
 
+	const uint32_t newNoteID();
+
 private:
 	Lv2Plugin * m_plugin;
 	QMutex m_pluginMutex;
 
+	LV2_Atom_Forge m_forge;
+	LV2_Atom_Forge_Frame m_frame;
+	QVector<Lv2NoteEvent> m_events;
+
 	QString m_uri;
 
 	LovelyView * m_view;
+	uint32_t m_id;
 
 	friend class LovelyView;
 };
@@ -107,5 +130,8 @@ private:
 
 	QListWidget m_pluginList;
 };
+
+
+
 
 #endif

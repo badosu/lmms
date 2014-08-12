@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Hannu Haahti <grejppi/at/gmail.com>
  *
- * This file is part of Linux MultiMedia Studio - http://lmms.sourceforge.net
+ * This file is part of LMMS - http://lmms.sourceforge.net
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public
@@ -32,9 +32,9 @@
 #include <lilv/lilv.h>
 
 #include <lv2/lv2plug.in/ns/ext/atom/atom.h>
-#include <lv2/lv2plug.in/ns/ext/buf-size/buf-size.h>
+#include <lv2/lv2plug.in/ns/ext/atom/forge.h>
 #include <lv2/lv2plug.in/ns/ext/atom/util.h>
-#include <lv2/lv2plug.in/ns/ext/event/event.h>
+#include <lv2/lv2plug.in/ns/ext/buf-size/buf-size.h>
 #include <lv2/lv2plug.in/ns/ext/midi/midi.h>
 #include <lv2/lv2plug.in/ns/ext/options/options.h>
 #include <lv2/lv2plug.in/ns/ext/parameters/parameters.h>
@@ -44,25 +44,34 @@
 #include <lv2/lv2plug.in/ns/ext/urid/urid.h>
 #include <lv2/lv2plug.in/ns/lv2core/lv2.h>
 
+#include "ext/note/note.h"
+
 #include <QVector>
 #include <QString>
 
-#include "lv2_evbuf.h"
 
 
 
-
-enum Lv2PortFlow {
+enum Lv2PortFlow
+{
 	FlowUnknown,
 	FlowInput,
-	FlowOutput,
+	FlowOutput
 };
 
-enum Lv2PortType {
+enum Lv2PortType
+{
 	TypeUnknown,
 	TypeControl,
 	TypeAudio,
 	TypeEvent
+};
+
+enum Lv2EventType
+{
+	EventTypeUnknown,
+	EventTypeMidi,
+	EventTypeNote
 };
 
 enum URIs
@@ -73,11 +82,11 @@ enum URIs
 	atom_Float,
 	atom_Int,
 	atom_Long,
+	atom_Object,
 	atom_Sequence,
 	bufsz_maxBlockLength,
 	bufsz_minBlockLength,
 	bufsz_sequenceSize,
-	ev_EventPort,
 	lv2_AudioPort,
 	lv2_ControlPort,
 	lv2_InputPort,
@@ -86,6 +95,12 @@ enum URIs
 	lv2_control,
 	lv2_name,
 	midi_MidiEvent,
+	note_NoteEvent,
+	note_id,
+	note_frequency,
+	note_gate,
+	note_stereoPanning,
+	note_velocity,
 	param_sampleRate,
 	pg_left,
 	pg_right,
@@ -116,6 +131,7 @@ public:
 
 	Lv2PortType type() const { return m_type; }
 	Lv2PortFlow flow() const { return m_flow; }
+	Lv2EventType eventType() const { return m_eventType; }
 
 	float minimum() const { return m_minimum; }
 	float maximum() const { return m_maximum; }
@@ -124,11 +140,11 @@ public:
 	const char * name() const { return m_name; }
 	const char * symbol() const { return m_symbol; }
 
-	LV2_Evbuf_Type evbufType() const { return m_evbufType; }
-
 private:
 	Lv2PortType m_type;
 	Lv2PortFlow m_flow;
+	Lv2EventType m_eventType;
+
 
 	float m_minimum;
 	float m_maximum;
@@ -136,8 +152,6 @@ private:
 
 	const char * m_symbol;
 	const char * m_name;
-
-	LV2_Evbuf_Type m_evbufType;
 
 	friend class Lv2Port;
 	friend class Lv2PluginDescriptor;
