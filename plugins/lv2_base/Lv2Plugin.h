@@ -105,9 +105,9 @@ public:
 
 	inline void writeEvent( const f_cnt_t time, const MidiEvent& event )
 	{
-		if( m_descriptor->portIndex( EventsIn ) != -1 )
+		if( m_descriptor->portIndex( AtomIn ) != -1 )
 		{
-			m_ports[m_descriptor->portIndex( EventsIn )].writeEvent( time, event );
+			m_ports[m_descriptor->portIndex( AtomIn )].writeEvent( time, event );
 		}
 	}
 

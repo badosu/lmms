@@ -136,7 +136,7 @@ void LovelyInstrument::play( sampleFrame * buffer )
 	m_plugin->resizeBuffers( nframes );
 
 	LV2_Atom_Forge_Frame frame;
-	LV2_Atom_Sequence * atomSequence = static_cast<LV2_Atom_Sequence *>( m_plugin->buffer( EventsIn ) );
+	LV2_Atom_Sequence * atomSequence = static_cast<LV2_Atom_Sequence *>( m_plugin->buffer( AtomIn ) );
 
 	lv2_atom_sequence_clear( atomSequence );
 	memset( LV2_ATOM_CONTENTS( LV2_Atom_Sequence, atomSequence ), 0, lv2()->s_sequenceSize );
@@ -218,8 +218,8 @@ void LovelyInstrument::playNote( NotePlayHandle * n, sampleFrame * )
 
 	if( n->totalFramesPlayed() == 0 || n->m_pluginData == NULL )
 	{
-		uint32_t eventsIn = m_plugin->descriptor()->portIndex( EventsIn );
-		Lv2PortDescriptor * eventPort = m_plugin->descriptor()->portDescriptor( eventsIn );
+		uint32_t atomIn = m_plugin->descriptor()->portIndex( AtomIn );
+		Lv2PortDescriptor * eventPort = m_plugin->descriptor()->portDescriptor( atomIn );
 
 		float frequency = ( eventPort->eventType() == EventTypeNote ) ? n->frequency() : n->unpitchedFrequency();
 

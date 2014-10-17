@@ -116,8 +116,8 @@ enum PortDesignation
 	RightIn,
 	LeftOut,
 	RightOut,
-	EventsIn,
-	EventsOut,
+	AtomIn,
+	AtomOut,
 	NumPortDesignations
 };
 
