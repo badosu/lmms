@@ -359,13 +359,13 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 	port = GET_PORT( m_plugin, lv2_InputPort, lv2_control );
 	if( port )
 	{
-		m_portIndex[EventsIn] = lilv_port_get_index( m_plugin, port );
+		m_portIndex[AtomIn] = lilv_port_get_index( m_plugin, port );
 	}
 
 	port = GET_PORT( m_plugin, lv2_OutputPort, lv2_control );
 	if( port )
 	{
-		m_portIndex[EventsOut] = lilv_port_get_index( m_plugin, port );
+		m_portIndex[AtomOut] = lilv_port_get_index( m_plugin, port );
 	}
 
 	for( uint32_t p = 0; p < numPorts(); ++p )
@@ -440,24 +440,20 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 			else
 			{
 				portdesc->m_eventType = EventTypeUnknown;
-				if( m_isInstrument )
-				{
-					m_isCompatible = false;
-				}
 			}
 
 			switch( portdesc->flow() )
 			{
 				case FlowInput:
-					if( portIndex( EventsIn ) == -1 )
+					if( portIndex( AtomIn ) == -1 )
 					{
-						m_portIndex[EventsIn] = p;
+						m_portIndex[AtomIn] = p;
 					}
 					break;
 				case FlowOutput:
-					if( portIndex( EventsOut ) == -1 )
+					if( portIndex( AtomOut ) == -1 )
 					{
-						m_portIndex[EventsOut] = p;
+						m_portIndex[AtomOut] = p;
 					}
 					break;
 				default:
@@ -486,6 +482,12 @@ Lv2PluginDescriptor::Lv2PluginDescriptor( const LilvPlugin * plugin ) :
 
 	// Currently we can't do anything with a plugin that outputs no sound
 	if( portIndex( LeftOut ) == -1 )
+	{
+		m_isCompatible = false;
+	}
+
+	// Neither do we have use for instruments that don't accept input
+	if( m_isInstrument && portIndex( AtomIn ) == -1 )
 	{
 		m_isCompatible = false;
 	}
