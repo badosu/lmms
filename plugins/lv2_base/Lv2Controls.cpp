@@ -54,8 +54,3 @@ Lv2Controls::~Lv2Controls()
 	}
 	m_knobs.clear();
 }
-
-
-
-
-#include "moc_Lv2Controls.cxx"

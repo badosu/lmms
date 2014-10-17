@@ -492,8 +492,3 @@ void LovelyView::loadPreset()
 	m_instrument->m_plugin->loadPreset( m_presetModel.value() - 1 );
 	m_instrument->m_pluginMutex.unlock();
 }
-
-
-
-
-#include "moc_Lovely.cxx"
