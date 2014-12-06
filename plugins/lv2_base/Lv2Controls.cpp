@@ -37,7 +37,7 @@ Lv2Controls::Lv2Controls( Lv2Plugin * plugin ) :
 		Lv2PortDescriptor * port = m_plugin->descriptor()->portDescriptor( p );
 		if( port->type() == TypeControl && port->flow() == FlowInput )
 		{
-			knob * knob = new knob();
+			Knob * knob = new Knob();
 			m_knobs[p] = knob;
 		}
 	}

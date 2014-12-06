@@ -25,7 +25,7 @@
 
 #include "lmmsconfig.h"
 
-#include "engine.h"
+#include "Engine.h"
 #include "Mixer.h"
 
 #include "Lv2Plugin.h"
@@ -126,7 +126,7 @@ Lv2Plugin::Lv2Plugin( Lv2PluginDescriptor * descriptor, double rate, fpp_t buffe
 	m_stateString( NULL )
 {
 	lv2()->setRate( rate );
-	lv2()->setBufferSize( engine::mixer()->framesPerPeriod() );
+	lv2()->setBufferSize( Engine::mixer()->framesPerPeriod() );
 
 	if( !instantiate( rate ) )
 	{
@@ -234,7 +234,7 @@ void Lv2Plugin::run( const fpp_t nframes )
 		return;
 	}
 
-	lv2()->setRate( engine::mixer()->framesPerPeriod() );
+	lv2()->setRate( Engine::mixer()->framesPerPeriod() );
 	resizeBuffers( nframes );
 	for( int i = 0; i < m_ports.size(); ++i )
 	{

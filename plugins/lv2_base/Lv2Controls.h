@@ -29,7 +29,7 @@
 #include <QMap>
 #include <QPair>
 
-#include "knob.h"
+#include "Knob.h"
 
 #include "Lv2Plugin.h"
 
@@ -46,7 +46,7 @@ public:
 
 private:
 	Lv2Plugin * m_plugin;
-	QMap<uint32_t, knob *> m_knobs;
+	QMap<uint32_t, Knob *> m_knobs;
 };
 
 #endif

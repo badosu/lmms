@@ -32,7 +32,7 @@
 #include <QVector>
 
 #include <QListWidget>
-#include "combobox.h"
+#include "ComboBox.h"
 
 #include "Instrument.h"
 #include "InstrumentView.h"
@@ -126,7 +126,7 @@ private:
 	Lv2Controls * m_controls;
 
 	ComboBoxModel m_presetModel;
-	comboBox m_presetList;
+	ComboBox m_presetList;
 
 	QListWidget m_pluginList;
 };

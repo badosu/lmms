@@ -25,11 +25,11 @@
 
 #include "lmmsconfig.h"
 
-#include "engine.h"
-#include "song.h"
+#include "Engine.h"
+#include "Song.h"
 #include "InstrumentTrack.h"
 #include "InstrumentPlayHandle.h"
-#include "text_float.h"
+#include "TextFloat.h"
 
 #include "Lv2NoteHandle.h"
 
@@ -85,8 +85,8 @@ LovelyInstrument::LovelyInstrument( InstrumentTrack * track ) :
 	m_view( NULL ),
 	m_id( 0 )
 {
-	InstrumentPlayHandle * handle = new InstrumentPlayHandle( this );
-	engine::mixer()->addPlayHandle( handle );
+	InstrumentPlayHandle * handle = new InstrumentPlayHandle( this, track );
+	Engine::mixer()->addPlayHandle( handle );
 	lv2_atom_forge_init( &m_forge, &lv2()->urid__map );
 }
 
@@ -100,7 +100,7 @@ LovelyInstrument::~LovelyInstrument()
 		delete m_plugin;
 		m_plugin = NULL;
 	}
-	engine::mixer()->removePlayHandles( instrumentTrack() );
+	Engine::mixer()->removePlayHandles( instrumentTrack() );
 }
 
 
@@ -132,7 +132,7 @@ void LovelyInstrument::play( sampleFrame * buffer )
 	}
 
 	m_plugin->setBaseVelocity( instrumentTrack()->midiPort()->baseVelocity() );
-	const fpp_t nframes = engine::mixer()->framesPerPeriod();
+	const fpp_t nframes = Engine::mixer()->framesPerPeriod();
 	m_plugin->resizeBuffers( nframes );
 
 	LV2_Atom_Forge_Frame frame;
@@ -348,7 +348,7 @@ void LovelyInstrument::saveSettings( QDomDocument & doc, QDomElement & self )
 
 void LovelyInstrument::loadSettings( const QDomElement & self )
 {
-	engine::mixer()->removePlayHandles( instrumentTrack(), false );
+	Engine::mixer()->removePlayHandles( instrumentTrack(), false );
 	m_pluginMutex.lock();
 
 	loadPlugin( self.attribute( "uri" ).toUtf8().constData() );
@@ -385,8 +385,8 @@ void LovelyInstrument::loadPlugin( const char * uri )
 	}
 	else
 	{
-		m_plugin = new Lv2Plugin( descriptor, engine::mixer()->processingSampleRate(), engine::mixer()->framesPerPeriod() );
-		m_plugin->run( engine::mixer()->framesPerPeriod() );
+		m_plugin = new Lv2Plugin( descriptor, Engine::mixer()->processingSampleRate(), Engine::mixer()->framesPerPeriod() );
+		m_plugin->run( Engine::mixer()->framesPerPeriod() );
 	}
 	m_uri = QString( uri );
 
