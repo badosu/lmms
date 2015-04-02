@@ -44,6 +44,16 @@
 
 #include <unistd.h>
 
+#ifdef __GNUC__
+    #if __GNUC__ > 4 ||  (__GNUC__ == 4 && __GNUC_MAJOR__ >= 7)
+        #define MEMORY_BARRIER() std::atomic_thread_fence(std::memory_order_release)
+    #else
+       #define MEMORY_BARRIER()  __sync_synchronize()
+    #endif
+#else
+    #define MEMORY_BARRIER() std::atomic_thread_fence(std::memory_order_release)
+#endif
+
 using namespace std;
 using namespace rtosc;
 #define rObject Master
@@ -107,12 +117,11 @@ static Ports localports = {
     rRecur(ctl, "Controller"),
     rParamZyn(Pkeyshift,  "Global Key Shift"),
     rArrayI(Pinsparts, NUM_INS_EFX, "Part to insert part onto"),
-    {"echo", rDoc("Hidden port to echo messages"), 0, [](const char *m, RtData&) {
-       bToU->raw_write(m-1);}},
+    {"echo", rDoc("Hidden port to echo messages"), 0, [](const char *m, RtData&d) {
+       d.reply(m-1);}},
     {"get-vu", rDoc("Grab VU Data"), 0, [](const char *, RtData &d) {
        Master *m = (Master*)d.obj;
-       bToU->write("/vu-meter", "bb", sizeof(m->vu), &m->vu, sizeof(float)*NUM_MIDI_PARTS, m->vuoutpeakpart);}},
-    {"reset-vu", rDoc("Grab VU Data"), 0, [](const char *, RtData &d) {
+       d.reply("/vu-meter", "bb", sizeof(m->vu), &m->vu, sizeof(float)*NUM_MIDI_PARTS, m->vuoutpeakpart);}},    {"reset-vu", rDoc("Grab VU Data"), 0, [](const char *, RtData &d) {
        Master *m = (Master*)d.obj;
        m->vuresetpeaks();}},
     {"load-part:ib", rProp(internal) rDoc("Load Part From Middleware"), 0, [](const char *msg, RtData &d) {
@@ -177,7 +186,8 @@ static Ports localports = {
     {"freeze_state:", rDoc("Internal Read-only Mode"), 0,
         [](const char *,RtData &d) {
             Master *M =  (Master*)d.obj;
-            std::atomic_thread_fence(std::memory_order_release);
+//            std::atomic_thread_fence(std::memory_order_release);
+            MEMORY_BARRIER();
             M->frozenState = true;
             d.reply("/state_frozen", "");}},
     {"thaw_state:", rDoc("Internal Read-only Mode"), 0,
@@ -193,8 +203,8 @@ static Ports localports = {
             Master *M =  (Master*)d.obj;
             printf("learning '%s'\n", rtosc_argument(m,0).s);
             M->midi.learn(rtosc_argument(m,0).s);}},
-    {"close-ui", rDoc("Request to close any connection named \"GUI\""), 0, [](const char *, RtData &) {
-       bToU->write("/close-ui", "");}},
+    {"close-ui", rDoc("Request to close any connection named \"GUI\""), 0, [](const char *, RtData &d) {
+       d.reply("/close-ui", "");}},
     {"add-rt-memory:bi", rProp(internal) rDoc("Add Additional Memory To RT MemPool"), 0,
         [](const char *msg, RtData &d)
         {
@@ -213,7 +223,9 @@ static Ports localports = {
 
 
 Ports &Master::ports = localports;
+//XXX HACKS
 Master *the_master;
+rtosc::ThreadLink *the_bToU;
 
 class DataObj:public rtosc::RtData
 {
@@ -227,7 +239,7 @@ class DataObj:public rtosc::RtData
             bToU     = bToU_;
         }
 
-        virtual void reply(const char *path, const char *args, ...) override
+        virtual void reply(const char *path, const char *args, ...)  
         {
             va_list va;
             va_start(va,args);
@@ -236,13 +248,13 @@ class DataObj:public rtosc::RtData
             reply(buffer);
             va_end(va);
         }
-        virtual void reply(const char *msg) override
+        virtual void reply(const char *msg)  
         {
             if(rtosc_message_length(msg, -1) == 0)
                 fprintf(stderr, "Warning: Invalid Rtosc message '%s'\n", msg);
             bToU->raw_write(msg);
         }
-        virtual void broadcast(const char *path, const char *args, ...) override{
+        virtual void broadcast(const char *path, const char *args, ...)  {
             va_list va;
             va_start(va,args);
             reply("/broadcast", "");
@@ -251,7 +263,7 @@ class DataObj:public rtosc::RtData
             reply(buffer);
             va_end(va);
         }
-        virtual void broadcast(const char *msg) override
+        virtual void broadcast(const char *msg)  
         {
             reply("/broadcast");
             reply(msg);
@@ -268,6 +280,8 @@ vuData::vuData(void)
 Master::Master()
 :midi(Master::ports), frozenState(false), pendingMemory(false)
 {
+	bToU = NULL;
+	uToB = NULL;
     memory = new Allocator();
     the_master = this;
     swaplr = 0;
@@ -301,8 +315,8 @@ Master::Master()
     midi.event_cb = [](const char *m)
     {
         char loc_buf[1024];
-        DataObj d{loc_buf, 1024, the_master, bToU};
-        memset(loc_buf, sizeof(loc_buf), 0);
+        DataObj d{loc_buf, 1024, the_master, the_bToU};
+        memset(loc_buf, 0, sizeof(loc_buf));
         //printf("sending an event to the owner of '%s'\n", m);
         Master::ports.dispatch(m+1, d);
     };
@@ -317,7 +331,7 @@ void Master::applyOscEvent(const char *msg)
 {
     char loc_buf[1024];
     DataObj d{loc_buf, 1024, this, bToU};
-    memset(loc_buf, sizeof(loc_buf), 0);
+    memset(loc_buf, 0, sizeof(loc_buf));
     d.matches = 0;
     ports.dispatch(msg+1, d);
     if(d.matches == 0)
@@ -561,6 +575,7 @@ void dump_msg(const char* ptr, std::ostream& os = std::cerr)
 		//	case 's':
 		//		_dump_prim_arg<char, const char*>(argptr, os); break;
 			default:
+			fprintf( stderr, "master exit" );
 				exit(1);
 		}
 	}
@@ -586,7 +601,7 @@ void Master::AudioOut(float *outl, float *outr)
     //Handle user events TODO move me to a proper location
     char loc_buf[1024];
     DataObj d{loc_buf, 1024, this, bToU};
-    memset(loc_buf, sizeof(loc_buf), 0);
+    memset(loc_buf, 0, sizeof(loc_buf));
     int events = 0;
     while(uToB->hasNext() && events < 10) {
         const char *msg = uToB->read();
@@ -613,7 +628,7 @@ void Master::AudioOut(float *outl, float *outr)
         events++;
         if(!d.matches) {// && !ports.apropos(msg)) {
             fprintf(stderr, "%c[%d;%d;%dm", 0x1B, 1, 7 + 30, 0 + 40);
-            fprintf(stderr, "Unknown address<BACKEND> '%s:%s'\n", uToB->peak(), rtosc_argument_string(uToB->peak()));
+//            fprintf(stderr, "Unknown address<BACKEND> '%s:%s'\n", uToB->peak(), rtosc_argument_string(uToB->peak()));
 #if 0
             if(strstr(msg, "PFMVelocity"))
                 dump_msg(msg);
@@ -628,7 +643,6 @@ void Master::AudioOut(float *outl, float *outr)
     if(events>1 && false)
         fprintf(stderr, "backend: %d events per cycle\n",events);
         
-
     //Swaps the Left channel with Right Channel
     if(swaplr)
         swap(outl, outr);
@@ -690,7 +704,6 @@ void Master::AudioOut(float *outl, float *outr)
             }
         }
     }
-
 
     //System effects
     for(int nefx = 0; nefx < NUM_SYS_EFX; ++nefx) {

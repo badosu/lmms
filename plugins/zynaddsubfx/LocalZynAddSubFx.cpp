@@ -64,9 +64,10 @@ LocalZynAddSubFx::LocalZynAddSubFx() :
 #endif
 #endif
 
-		initConfig();
+		++s_instanceCount;
 
 		synth = new SYNTH_T;
+		initConfig();
 		synth->oscilsize = config.cfg.OscilSize;
 		synth->alias();
 
@@ -78,18 +79,16 @@ LocalZynAddSubFx::LocalZynAddSubFx() :
 			denormalkillbuf[i] = (RND-0.5)*1e-16;
 		}
 	}
-
-	++s_instanceCount;
-
 	m_middleWare = new MiddleWare();
 	middleware = m_middleWare;
 
 	m_ioEngine = new NulEngine;
 
-    m_master = m_middleWare->spawnMaster();
+	m_master = m_middleWare->spawnMaster();
 	m_master->swaplr = 0;
 
-    Nio::init( m_master );
+	Nio::init( m_master );
+
 }
 
 
@@ -97,16 +96,13 @@ LocalZynAddSubFx::LocalZynAddSubFx() :
 
 LocalZynAddSubFx::~LocalZynAddSubFx()
 {
-    Nio::stop();
-
-	delete m_master;
-	delete m_ioEngine;
 	delete m_middleWare;
 
 	if( --s_instanceCount == 0 )
 	{
 		delete[] denormalkillbuf;
 	}
+
 }
 
 

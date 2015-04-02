@@ -34,9 +34,23 @@
 
 #include <err.h>
 
+//macro for mfence in gcc < 4.7
+#ifdef __GNUC__
+    #if __GNUC__ > 4 ||  (__GNUC__ == 4 && __GNUC_MAJOR__ >= 7)
+        #define MEMORY_BARRIER() std::atomic_thread_fence(std::memory_order_acquire)
+    #else
+       #define MEMORY_BARRIER()  __sync_synchronize()
+    #endif
+#else
+    #define MEMORY_BARRIER() std::atomic_thread_fence(std::memory_order_acquire)
+#endif
+
+
+
+
+
 using std::string;
-rtosc::ThreadLink *bToU = new rtosc::ThreadLink(4096*2,1024);
-rtosc::ThreadLink *uToB = new rtosc::ThreadLink(4096*2,1024);
+extern rtosc::ThreadLink *the_bToU;//XXX
 rtosc::UndoHistory undo;
 
 /******************************************************************************
@@ -103,7 +117,7 @@ void path_search(const char *m)
     char buffer[1024*20];
     size_t length = rtosc_amessage(buffer, sizeof(buffer), "/paths", types, args);
     if(length) {
-	lo_message msg  = lo_message_deserialise((void*)buffer, length, NULL);
+    lo_message msg  = lo_message_deserialise((void*)buffer, length, NULL);
         lo_address addr = lo_address_new_from_url(last_url.c_str());
         if(addr)
             lo_send_message(addr, buffer, msg);
@@ -116,12 +130,12 @@ static int handler_function(const char *path, const char *types, lo_arg **argv,
     (void) types;
     (void) argv;
     (void) argc;
-    (void) user_data;
+    MiddleWare *mw = (MiddleWare*)user_data;
     lo_address addr = lo_message_get_source(msg);
     if(addr) {
         const char *tmp = lo_address_get_url(addr);
         if(tmp != last_url) {
-            uToB->write("/echo", "ss", "OSC_URL", tmp);
+        mw->transmitMsg("/echo", "ss", "OSC_URL", tmp);
             last_url = tmp;
         }
 
@@ -134,7 +148,7 @@ static int handler_function(const char *path, const char *types, lo_arg **argv,
     if(!strcmp(buffer, "/path-search") && !strcmp("ss", rtosc_argument_string(buffer))) {
         path_search(buffer);
     } else
-        uToB->raw_write(buffer);
+		mw->transmitMsg(buffer);
 
     return 0;
 }
@@ -163,14 +177,14 @@ void deallocate(const char *str, void *v)
  *                    PadSynth Setup                                         *
  *****************************************************************************/
 
-void preparePadSynth(string path, PADnoteParameters *p)
+void preparePadSynth(string path, PADnoteParameters *p, rtosc::ThreadLink *uToB)
 {
     //printf("preparing padsynth parameters\n");
     assert(!path.empty());
     path += "sample";
 
     unsigned max = 0;
-    p->sampleGenerator([&max,&path]
+    p->sampleGenerator([&max,&path,uToB]
             (unsigned N, PADnoteParameters::Sample &s)
             {
             max = max<N ? N : max;
@@ -256,7 +270,7 @@ class DummyDataObj:public rtosc::RtData
 {
     public:
         DummyDataObj(char *loc_, size_t loc_size_, void *obj_, cb_t cb_, void *ui_,
-                Fl_Osc_Interface *osc_)
+                Fl_Osc_Interface *osc_, rtosc::ThreadLink *uToB_)
         {
             memset(loc_, 0, sizeof(loc_size_));
             buffer = new char[4*4096];
@@ -267,6 +281,7 @@ class DummyDataObj:public rtosc::RtData
             cb       = cb_;
             ui       = ui_;
             osc      = osc_;
+            uToB     = uToB_;
         }
         ~DummyDataObj(void)
         {
@@ -308,6 +323,7 @@ class DummyDataObj:public rtosc::RtData
         cb_t cb;
         void *ui;
         Fl_Osc_Interface *osc;
+        rtosc::ThreadLink *uToB;
 };
 
 
@@ -443,9 +459,11 @@ class MiddleWareImpl
     {
         std::string tmp_nam = get_tmp_nam();
         if(0 == access(tmp_nam.c_str(), F_OK)) {
-            fprintf(stderr, "Error: Cannot overwrite file %s. "
-                    "You should probably remove it.", tmp_nam.c_str());
-            exit(EXIT_FAILURE);
+//            fprintf(stderr, "Error: Cannot overwrite file %s. "
+//                    "You should probably remove it.", tmp_nam.c_str());
+            //commented out the exit, This is a check for standalone zyn
+            //that causes crashes whith multiple interal instances
+//curlymorphic            exit(EXIT_FAILURE);
         }
         FILE* tmp_fp = fopen(tmp_nam.c_str(), "w");
         if(!tmp_fp)
@@ -476,9 +494,9 @@ class MiddleWareImpl
 
                     if(!ifs.good())
                     {
-                        fprintf(stderr, "Note: trying to remove %s - the "
-                                        "process does not exist anymore.\n",
-                                name.c_str());
+//                        fprintf(stderr, "Note: trying to remove %s - the "
+//                                        "process does not exist anymore.\n",
+//                                name.c_str());
                         remove = true;
                     }
                     else
@@ -490,10 +508,10 @@ class MiddleWareImpl
                                             "zynaddsubfx with PID %s.\n",
                                     name.c_str() + strlen(tmp_nam_prefix));
                         else {
-                            fprintf(stderr, "Note: trying to remove %s - the "
-                                            "PID is owned by\n  another "
-                                            "process: %s\n",
-                                    name.c_str(), comm_name.c_str());
+//                            fprintf(stderr, "Note: trying to remove %s - the "
+//                                            "PID is owned by\n  another "
+//                                            "process: %s\n",
+//                                    name.c_str(), comm_name.c_str());
                             remove = true;
                         }
                     }
@@ -511,10 +529,11 @@ class MiddleWareImpl
                         {
                             ifs2 >> udp_port;
                             if(ifs.good())
-                                fprintf(stderr, "Warning: could not remove "
-                                                "%s, \n  it has not been "
-                                                "written by zynaddsubfx\n",
-                                        name.c_str());
+//                                fprintf(stderr, "Warning: could not remove "
+//                                                "%s, \n  it has not been "
+//                                                "written by zynaddsubfx\n",
+//                                        name.c_str());
+                            ; //here to keep if statement
                             else
                             {
                                 if(std::remove(name.c_str()) != 0)
@@ -639,9 +658,10 @@ public:
 
         //Load the part
         if(idle) {
-            while(alloc.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
-                idle();
-            }
+//            while(alloc.wait_for( sleep(1)) != std::future_status::ready) {
+//                idle();
+//            }
+			sleep(1);
         }
 
         Part *p = alloc.get();
@@ -661,6 +681,8 @@ public:
     void loadMaster(const char *filename)
     {
         Master *m = new Master();
+        m->uToB = uToB;
+        m->bToU = bToU;
         if(filename) {
             m->loadXML(filename);
             m->applyparameters();
@@ -679,10 +701,6 @@ public:
         uToB->write("/load-master", "b", sizeof(Master*), &m);
     }
 
-    //If currently broadcasting messages
-    bool broadcast = false;
-    //If accepting undo events as user driven
-    bool recording_undo = true;
     void bToUhandle(const char *rtmsg);
 
     void tick(void)
@@ -700,7 +718,7 @@ public:
             return true;
         char buffer[1024];
         memset(buffer, 0, sizeof(buffer));
-        DummyDataObj d(buffer, 1024, v, cb, ui, osc);
+		DummyDataObj d(buffer, 1024, v, cb, ui, osc, uToB);
         strcpy(buffer, path.c_str());
 
         PADnoteParameters::ports.dispatch(msg, d);
@@ -754,13 +772,28 @@ public:
 
     std::atomic_int pending_load[NUM_MIDI_PARTS];
     std::atomic_int actual_load[NUM_MIDI_PARTS];
+
+    //Link To the Realtime
+    rtosc::ThreadLink *bToU;
+    rtosc::ThreadLink *uToB;
 };
+    //If currently broadcasting messages
+    bool broadcast; 
+    //If accepting undo events as user driven
+    bool recording_undo; 
 
 MiddleWareImpl::MiddleWareImpl(MiddleWare *mw)
 {
+
+    // added for compatability with gcc 4.6
+    broadcast = false;
+    recording_undo = true;
+
+    bToU = new rtosc::ThreadLink(4096*2,1024);
+    uToB = new rtosc::ThreadLink(4096*2,1024);
     server = lo_server_new_with_proto(NULL, LO_UDP, liblo_error_cb);
-    lo_server_add_method(server, NULL, NULL, handler_function, NULL);
-    fprintf(stderr, "lo server running on %d\n", lo_server_get_port(server));
+    lo_server_add_method(server, NULL, NULL, handler_function, mw);
+//    fprintf(stderr, "lo server running on %d\n", lo_server_get_port(server));
 
     clean_up_tmp_nams();
     create_tmp_file((unsigned)lo_server_get_port(server));
@@ -769,7 +802,10 @@ MiddleWareImpl::MiddleWareImpl(MiddleWare *mw)
     cb = [](void*, const char*){};
     idle = 0;
 
+    the_bToU = bToU;
     master = new Master();
+    master->bToU = bToU;
+    master->uToB = uToB;
     osc    = GUI::genOscInterface(mw);
 
     //Grab objects of interest from master
@@ -798,9 +834,13 @@ MiddleWareImpl::~MiddleWareImpl(void)
 
     warnMemoryLeaks();
 
+    delete bToU;// = new rtosc::ThreadLink(4096*2,1024);
+    delete uToB; // = new rtosc::ThreadLink(4096*2,1024);
+
     delete master;
     delete osc;
 }
+
 
 /** Threading When Saving
  *  ----------------------
@@ -846,8 +886,8 @@ void MiddleWareImpl::doReadOnlyOp(std::function<void()> read_only_fn)
     }
 
     assert(tries < 10000);//if this happens, the backend must be dead
-
-    std::atomic_thread_fence(std::memory_order_acquire);
+//    std::atomic_thread_fence(std::memory_order_acquire);
+    MEMORY_BARRIER();
 
     //Now it is safe to do any read only operation
     read_only_fn();
@@ -873,7 +913,7 @@ void MiddleWareImpl::bToUhandle(const char *rtmsg)
     }
 
     //Activity dot
-    printf(".");fflush(stdout);
+//    printf(".");fflush(stdout);
 
     if(!strcmp(rtmsg, "/echo")
             && !strcmp(rtosc_argument_string(rtmsg),"ss")
@@ -931,7 +971,7 @@ bool MiddleWareImpl::handleOscil(string path, const char *msg, void *v)
     printf("handleOscil...\n");
     char buffer[1024];
     memset(buffer, 0, sizeof(buffer));
-    DummyDataObj d(buffer, 1024, v, cb, ui, osc);
+    DummyDataObj d(buffer, 1024, v, cb, ui, osc, uToB);
     strcpy(buffer, path.c_str());
     if(!v)
         return true;
@@ -1066,7 +1106,7 @@ void MiddleWareImpl::handleMsg(const char *msg)
             //else if(strstr(obj_rl.c_str(), "kititem"))
             //    handleKitItem(obj_rl, objmap[obj_rl],atoi(rindex(msg,'m')+1),rtosc_argument(msg,0).T);
         } else if(strstr(msg, "padpars/prepare"))
-            preparePadSynth(obj_rl,(PADnoteParameters *) obj_store.get(obj_rl));
+            preparePadSynth(obj_rl,(PADnoteParameters *) obj_store.get(obj_rl), uToB);
         else if(strstr(msg, "padpars")) {
             if(!handlePAD(obj_rl, last_path+1, obj_store.get(obj_rl)))
                 uToB->raw_write(msg);
@@ -1196,9 +1236,10 @@ void MiddleWare::transmitMsg(const char *path, const char *args, va_list va)
         fprintf(stderr, "Error in transmitMsg(va)n");
 }
 
-void MiddleWare::pendingSetProgram(int part)
+void MiddleWare::pendingSetProgram(int part, int program)
 {
     impl->pending_load[part]++;
+    impl->bToU->write("/setprogram", "cc", part, program);
 }
 
 std::string MiddleWare::activeUrl(void)

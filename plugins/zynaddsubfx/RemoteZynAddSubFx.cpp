@@ -52,8 +52,6 @@ public:
 		m_guiSleepTime( 100 ),
 		m_guiExit( false )
 	{
-		Nio::start();
-
 		setInputCount( 0 );
 		sendMessage( IdInitDone );
 		waitForMessage( IdInitDone );
@@ -128,9 +126,15 @@ public:
 				LocalZynAddSubFx::setPitchWheelBendRange( _m.getInt() );
 				break;
 
+			case IdSampleRateInformation:
+				LocalZynAddSubFx::setSampleRate( _m.getInt() );
+				break;
+
 			default:
 				return RemotePluginClient::processMessage( _m );
 		}
+		GUI::tickUi(gui);
+		m_middleWare->tick();
 		return true;
 	}
 
@@ -212,12 +216,15 @@ void RemoteZynAddSubFx::guiThread()
 						Fl::scheme( "plastic" );
 
 						gui = GUI::createUi( m_middleWare->spawnUiApi(), &exitProgram );
-					    m_middleWare->setUiCallback( GUI::raiseUi, gui );
+						m_middleWare->setUiCallback( GUI::raiseUi, gui );
 						m_middleWare->setIdleCallback([](){GUI::tickUi(gui);});
+						middlewarepointer = m_middleWare; //added curlymorphic
 
 						ui = static_cast<MasterUI *>( gui );
 					}
 					ui->showUI();
+					ui->npartcounter->do_callback();
+					ui->updatepanel();
 					ui->refresh_master_ui();
 					break;
 
@@ -226,6 +233,8 @@ void RemoteZynAddSubFx::guiThread()
 					LocalZynAddSubFx::loadXML( m.getString() );
 					if( ui )
 					{
+						ui->npartcounter->do_callback();
+						ui->updatepanel();
 						ui->refresh_master_ui();
 					}
 					sendMessage( IdLoadSettingsFromFile );
@@ -246,14 +255,20 @@ void RemoteZynAddSubFx::guiThread()
 					break;
 				}
 
+			case IdSampleRateInformation:
+				LocalZynAddSubFx::setSampleRate( m.getInt() );
+				break;
+
 				default:
 					break;
 			}
+
 		}
 		pthread_mutex_unlock( &m_guiMutex );
+
+		m_middleWare->tick();
 	}
 	Fl::flush();
-
     GUI::destroyUi( gui );
 }
 

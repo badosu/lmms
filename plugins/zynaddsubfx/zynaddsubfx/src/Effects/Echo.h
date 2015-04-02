@@ -26,8 +26,11 @@
 #include "Effect.h"
 #include "../Misc/Stereo.h"
 
+using namespace Zyn;
+
+
 /**Echo Effect*/
-class Echo:public Effect
+class Echo:public Zyn::Effect
 {
     public:
         Echo(EffectParams pars);
@@ -69,7 +72,7 @@ class Echo:public Effect
         int getnumparams(void);
         void cleanup(void);
     private:
-		int samplerate;
+//		int samplerate; // removed to stop clsh with sub class
 
         //Parameters
         unsigned char Pvolume;  /**<#1 Volume or Dry/Wetness*/
